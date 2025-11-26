@@ -1,5 +1,6 @@
 import './style.css';
 import * as THREE from 'three';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PlayerController } from './player';
 
@@ -7,13 +8,12 @@ import { PlayerController } from './player';
 const CONFIG = {
   fov: 90,
   defaultSensitivity: 1.0,
-  gravity: { x: 0.0, y: -16.0, z: 0.0 }
+  gravity: { x: 0.0, y: -16.0, z: 0.0 },
+  skyboxPath: '/textures/skybox/DayInTheClouds4k.hdr'
 };
 
 // --- SCENE SETUP ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
 
 const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -24,10 +24,27 @@ const renderer = new THREE.WebGLRenderer({
   depth: true
 });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.8;
 document.body.appendChild(renderer.domElement);
 
+// --- SKYBOX ---
+new HDRLoader().load(
+  CONFIG.skyboxPath,
+  (texture) => {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = texture;
+    scene.environment = texture;
+  },
+  undefined,
+  (error) => {
+    console.error('An error occurred loading the skybox:', error);
+    scene.background = new THREE.Color(0x87CEEB);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  }
+);
+
 // --- LIGHTS ---
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(10, 50, 10);
 scene.add(dirLight);
@@ -153,6 +170,11 @@ settings.innerHTML = `
   <label>Sens: <input type="range" id="sens" min="0.1" max="10.0" step="0.05" value="${CONFIG.defaultSensitivity}"></label> <span id="sens-val">${CONFIG.defaultSensitivity}</span>
 `;
 document.body.appendChild(settings);
+
+// --- CROSSHAIR ---
+const crosshair = document.createElement('div');
+crosshair.id = 'crosshair';
+document.body.appendChild(crosshair);
 
 const sensInput = document.getElementById('sens') as HTMLInputElement;
 const sensVal = document.getElementById('sens-val') as HTMLElement;

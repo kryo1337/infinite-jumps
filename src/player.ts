@@ -19,7 +19,7 @@ interface PlayerInput {
 }
 
 export class PlayerController {
-  static readonly SPAWN_POSITION = { x: 0, y: 5, z: 0 };
+  static readonly SPAWN_POSITION = { x: 0, y: 3, z: 0 };
 
   static readonly GROUND_ACCELERATION = 14.0;
   static readonly AIR_ACCELERATION = 200.0;

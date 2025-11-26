@@ -103,3 +103,16 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 4px;
+  background-color: #ffffff;
+  border: 3px solid #000000;
+  pointer-events: none;
+  z-index: 1000;
+}
