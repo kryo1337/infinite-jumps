@@ -1,6 +1,6 @@
 # infinite jumps
 
-**infinite jumps** is a high-performance web-based FPS movement game that faithfully recreates the mechanics of Source Engine style Bunnyhop and Surf modes.
+**infinite jumps** is a high-performance web-based FPS movement game that recreates the mechanics of source engine.
 
 ## Features
 
@@ -9,9 +9,10 @@
 *   **Surf**: Custom velocity projection logic enables smooth gliding on angled surfaces.
 
 ### Map & Gameplay
-*   **Test Course**: A static map featuring:
-    *   **Bhop Blocks**: Precision platforming challenges.
-    *   **Surf Ramps**: Angled surfaces for surfing mechanics.
+*   **Infinite Level**: A procedurally generated endless course:
+    *   **Dynamic Spacing**: Platform gaps increase dynamically based on player speed.
+    *   **Endless Generation**: New blocks spawn ahead of you while old ones are recycled.
+    *   **High Performance**: Optimized object pooling ensures smooth gameplay.
 *   **UI**:
     *   Real-time **HUD** displaying FPS and Speed (units/second).
     *   **Sensitivity Slider** for adjusting mouse control.
