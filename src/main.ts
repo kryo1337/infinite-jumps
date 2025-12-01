@@ -5,6 +5,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { PlayerController } from './player';
 import { LevelLoader } from './level_loader';
 import { UIManager } from './ui_manager';
+import { AuthManager } from './auth_manager';
 
 // --- CONFIG ---
 const CONFIG = {
@@ -71,7 +72,6 @@ const player = new PlayerController(camera, document.body, world, {
 
 // --- UI ---
 const ui = new UIManager(CONFIG.defaultSensitivity);
-ui.onSensitivityChange((val) => player.setSensitivity(val));
 
 ui.onLoadLevel = (type) => {
   if (type === 'playground' || type === 'infinite') {
@@ -79,6 +79,75 @@ ui.onLoadLevel = (type) => {
     player.respawn();
     document.body.requestPointerLock();
   }
+};
+
+// --- AUTH ---
+const authManager = new AuthManager();
+
+function getFriendlyErrorMessage(code: string): string | null {
+  switch (code) {
+    case 'auth/invalid-email': return 'That email address looks invalid.';
+    case 'auth/user-disabled': return 'This account has been banned.';
+    case 'auth/user-not-found': return 'No account found with this email.';
+    case 'auth/wrong-password': return 'Incorrect password.';
+    case 'auth/email-already-in-use': return 'Email is already in use.';
+    case 'auth/weak-password': return 'Password is too weak.';
+    case 'auth/popup-closed-by-user': return 'Sign-in popup was closed.';
+    default: return null;
+  }
+}
+
+ui.onLoginGoogleRequest = async () => {
+  try {
+    await authManager.loginWithGoogle();
+  } catch (e: any) {
+    ui.showAuthError(getFriendlyErrorMessage(e.code) || e.message || 'Google login failed');
+  }
+};
+
+ui.onLoginEmailRequest = async (email, pass) => {
+  try {
+    await authManager.loginWithEmail(email, pass);
+  } catch (e: any) {
+    ui.showAuthError(getFriendlyErrorMessage(e.code) || e.message || 'Login failed');
+  }
+};
+
+ui.onRegisterEmailRequest = async (email, pass) => {
+  try {
+    await authManager.registerWithEmail(email, pass);
+  } catch (e: any) {
+    ui.showAuthError(getFriendlyErrorMessage(e.code) || e.message || 'Registration failed');
+  }
+};
+
+ui.onLogoutRequest = () => {
+  authManager.logout();
+};
+
+ui.onApplySettings = (settings) => {
+  player.setSensitivity(settings.sensitivity);
+
+  const settingsToSave = {
+    sensitivity: settings.sensitivity,
+    nickname: (settings.nickname || '').trim() || 'Player'
+  };
+
+  authManager.saveSettings(settingsToSave);
+  ui.toggleSettings(false);
+};
+
+authManager.onAuthStateChanged = (user) => {
+  ui.updateUserHeader(user);
+  if (user) {
+    ui.toggleAuthModal(false);
+  }
+};
+
+authManager.onSettingsLoaded = (settings) => {
+  player.setSensitivity(settings.sensitivity);
+  ui.syncSettings(settings);
+  ui.updateUserHeader(authManager.currentUser, settings.nickname);
 };
 
 let isPaused = false;
