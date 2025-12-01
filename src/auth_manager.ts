@@ -4,8 +4,6 @@ import {
   getAuth,
   signInWithPopup,
   GoogleAuthProvider,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
@@ -14,7 +12,14 @@ import {
   getFirestore,
   doc,
   setDoc,
-  getDoc
+  getDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  runTransaction
 } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 
@@ -26,6 +31,18 @@ const FIREBASE_CONFIG = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
+
+export interface LeaderboardEntry {
+  rank: number;
+  nickname: string;
+  score: number;
+  uid: string;
+}
+
+export interface ScoreResult {
+  isNewHighScore: boolean;
+  currentHighScore: number;
+}
 
 export interface UserSettings {
   sensitivity: number;
@@ -45,6 +62,8 @@ export class AuthManager {
     sensitivity: 1.0,
     nickname: 'Player'
   };
+
+  private _currentSettings: UserSettings = { ...this.defaultSettings };
 
   constructor() {
     try {
@@ -72,34 +91,10 @@ export class AuthManager {
     if (!this.auth) { console.warn("Auth not initialized"); return; }
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(this.auth, provider);
+      const result = await signInWithPopup(this.auth, provider);
+      this._currentUser = result.user;
     } catch (error) {
       console.error("Error logging in with Google:", error);
-      throw error;
-    }
-  }
-
-  public async loginWithEmail(email: string, pass: string): Promise<void> {
-    if (!this.auth) { console.warn("Auth not initialized"); return; }
-    try {
-      await signInWithEmailAndPassword(this.auth, email, pass);
-    } catch (error) {
-      console.error("Error logging in with Email/Password:", error);
-      throw error;
-    }
-  }
-
-  public async registerWithEmail(email: string, pass: string): Promise<void> {
-    if (!this.auth) { console.warn("Auth not initialized"); return; }
-    try {
-      await createUserWithEmailAndPassword(this.auth, email, pass);
-      const nickname = email.split('@')[0];
-      await this.saveSettings({
-        sensitivity: 1.0,
-        nickname: nickname
-      });
-    } catch (error) {
-      console.error("Error registering with Email/Password:", error);
       throw error;
     }
   }
@@ -114,32 +109,160 @@ export class AuthManager {
     }
   }
 
-
-
   public getNickname(): string {
-    return this._currentUser?.displayName || this.defaultSettings.nickname;
+    return this._currentSettings.nickname;
+  }
+
+  public async isNicknameTaken(nickname: string): Promise<boolean> {
+    if (!this.db) return false;
+
+    try {
+      const q = query(collection(this.db, 'users'), where('nickname', '==', nickname));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) return false;
+
+      if (this._currentUser) {
+        let taken = false;
+        snapshot.forEach(d => {
+          if (d.id !== this._currentUser?.uid) taken = true;
+        });
+        return taken;
+      }
+
+      return true;
+    } catch (error: any) {
+      throw new Error("Could not verify nickname availability. Check your connection.");
+    }
   }
 
   public async saveSettings(settings: UserSettings): Promise<void> {
+    if (this._currentUser && this.db) {
+      if (settings.nickname !== this._currentSettings.nickname) {
+        const taken = await this.isNicknameTaken(settings.nickname);
+        if (taken) {
+          throw new Error("Nickname is already taken");
+        }
+      }
+    }
+
+    this._currentSettings = { ...settings };
     localStorage.setItem('kz_settings', JSON.stringify(settings));
 
     if (this._currentUser && this.db) {
       try {
         const userRef = doc(this.db, 'users', this._currentUser.uid);
         await setDoc(userRef, settings, { merge: true });
+
+        const scoreRef = doc(this.db, 'leaderboard', this._currentUser.uid);
+        const scoreSnap = await getDoc(scoreRef);
+        if (scoreSnap.exists()) {
+          await setDoc(scoreRef, { nickname: settings.nickname }, { merge: true });
+        }
+
         console.log('Settings saved to Firestore');
       } catch (error) {
         console.error('Error saving settings to Firestore:', error);
+        throw error;
       }
     } else {
       console.log('Settings saved to LocalStorage (not logged in or DB unavailable)');
     }
   }
 
+  public async saveScore(score: number): Promise<ScoreResult> {
+    if (!this._currentUser || !this.db) {
+      const localHigh = parseInt(localStorage.getItem('local_highscore') || '0', 10);
+      if (score > localHigh) {
+        localStorage.setItem('local_highscore', score.toString());
+        return { isNewHighScore: true, currentHighScore: score };
+      }
+      return { isNewHighScore: false, currentHighScore: localHigh };
+    }
+
+    const uid = this._currentUser.uid;
+    const scoreRef = doc(this.db, 'leaderboard', uid);
+
+    try {
+      return await runTransaction(this.db, async (transaction) => {
+        const docSnap = await transaction.get(scoreRef);
+        let oldScore = 0;
+
+        if (docSnap.exists()) {
+          oldScore = docSnap.data().score || 0;
+        }
+
+        if (score > oldScore) {
+          transaction.set(scoreRef, {
+            uid: uid,
+            nickname: this.getNickname(),
+            score: score,
+            timestamp: Date.now()
+          }, { merge: true });
+          return { isNewHighScore: true, currentHighScore: score };
+        }
+
+        return { isNewHighScore: false, currentHighScore: oldScore };
+      });
+    } catch (error) {
+      console.error("Error saving score:", error);
+      throw error;
+    }
+  }
+
+  public async getLeaderboard(limitCount: number = 10): Promise<LeaderboardEntry[]> {
+    if (!this.db) return [];
+
+    try {
+      const q = query(
+        collection(this.db, 'leaderboard'),
+        orderBy('score', 'desc'),
+        limit(limitCount)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const leaderboard: LeaderboardEntry[] = [];
+      let rank = 1;
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        leaderboard.push({
+          rank: rank++,
+          uid: data.uid,
+          nickname: data.nickname || 'Unknown',
+          score: data.score || 0
+        });
+      });
+
+      return leaderboard;
+    } catch (error) {
+      console.error("Error fetching leaderboard:", error);
+      return [];
+    }
+  }
+
+  public async getUserHighScore(): Promise<number> {
+    if (!this._currentUser || !this.db) {
+      return parseInt(localStorage.getItem('local_highscore') || '0', 10);
+    }
+
+    try {
+      const scoreRef = doc(this.db, 'leaderboard', this._currentUser.uid);
+      const docSnap = await getDoc(scoreRef);
+      if (docSnap.exists()) {
+        return docSnap.data().score || 0;
+      }
+      return 0;
+    } catch (error) {
+      console.warn("Failed to fetch user highscore", error);
+      return 0;
+    }
+  }
+
   private async loadSettings(): Promise<void> {
     let settings: UserSettings = {
       sensitivity: 1.0,
-      nickname: this._currentUser?.displayName || (this._currentUser?.email ? this._currentUser.email.split('@')[0] : 'Player')
+      nickname: this._currentUser?.displayName || 'Player'
     };
 
     const localStr = localStorage.getItem('kz_settings');
@@ -150,6 +273,10 @@ export class AuthManager {
         localSettings = {};
         if (typeof rawSettings.sensitivity === 'number') localSettings.sensitivity = rawSettings.sensitivity;
         if (typeof rawSettings.nickname === 'string') localSettings.nickname = rawSettings.nickname;
+
+        if (localSettings.nickname === 'Player' && this._currentUser?.displayName) {
+          localSettings.nickname = this._currentUser.displayName.replace(/\s/g, '');
+        }
 
         settings = { ...settings, ...localSettings };
       } catch (e) {
@@ -167,13 +294,33 @@ export class AuthManager {
           settings = { ...settings, ...data };
           console.log('Settings loaded from Firestore');
         } else {
-          if (localSettings) {
-            console.log('New user detected. Uploading local settings to cloud...');
+          console.log('New user detected (or missing doc). Creating default settings in cloud...');
+
+          if (settings.nickname === 'Player' && this._currentUser.displayName) {
+            settings.nickname = this._currentUser.displayName.replace(/\s/g, '');
+          }
+
+          try {
             await this.saveSettings(settings);
+          } catch (e) {
+            if (settings.nickname !== 'Player') {
+              settings.nickname = `${settings.nickname}_${Math.floor(Math.random() * 1000)}`;
+              await this.saveSettings(settings);
+            }
           }
         }
       } catch (error) {
         console.warn('Error loading settings from Firestore (Offline?):', error);
+      }
+    }
+
+    this._currentSettings = settings;
+
+    if (this._currentUser && this.db) {
+      const localHigh = parseInt(localStorage.getItem('local_highscore') || '0', 10);
+      if (localHigh > 0) {
+        console.log('Syncing local highscore to cloud...');
+        await this.saveScore(localHigh);
       }
     }
 

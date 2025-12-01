@@ -153,8 +153,6 @@ export class PlayerController {
       if (action) this.keys.delete(action);
     });
 
-    document.addEventListener('click', () => this.domElement.requestPointerLock());
-
     document.addEventListener('mousemove', (e: MouseEvent) => {
       if (document.pointerLockElement !== this.domElement) return;
 

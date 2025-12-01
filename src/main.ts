@@ -86,12 +86,7 @@ const authManager = new AuthManager();
 
 function getFriendlyErrorMessage(code: string): string | null {
   switch (code) {
-    case 'auth/invalid-email': return 'That email address looks invalid.';
     case 'auth/user-disabled': return 'This account has been banned.';
-    case 'auth/user-not-found': return 'No account found with this email.';
-    case 'auth/wrong-password': return 'Incorrect password.';
-    case 'auth/email-already-in-use': return 'Email is already in use.';
-    case 'auth/weak-password': return 'Password is too weak.';
     case 'auth/popup-closed-by-user': return 'Sign-in popup was closed.';
     default: return null;
   }
@@ -105,36 +100,24 @@ ui.onLoginGoogleRequest = async () => {
   }
 };
 
-ui.onLoginEmailRequest = async (email, pass) => {
-  try {
-    await authManager.loginWithEmail(email, pass);
-  } catch (e: any) {
-    ui.showAuthError(getFriendlyErrorMessage(e.code) || e.message || 'Login failed');
-  }
-};
-
-ui.onRegisterEmailRequest = async (email, pass) => {
-  try {
-    await authManager.registerWithEmail(email, pass);
-  } catch (e: any) {
-    ui.showAuthError(getFriendlyErrorMessage(e.code) || e.message || 'Registration failed');
-  }
-};
-
 ui.onLogoutRequest = () => {
   authManager.logout();
 };
 
-ui.onApplySettings = (settings) => {
-  player.setSensitivity(settings.sensitivity);
+ui.onApplySettings = async (settings) => {
+  try {
+    player.setSensitivity(settings.sensitivity);
 
-  const settingsToSave = {
-    sensitivity: settings.sensitivity,
-    nickname: (settings.nickname || '').trim() || 'Player'
-  };
+    const settingsToSave = {
+      sensitivity: settings.sensitivity,
+      nickname: (settings.nickname || '').trim() || 'Player'
+    };
 
-  authManager.saveSettings(settingsToSave);
-  ui.toggleSettings(false);
+    await authManager.saveSettings(settingsToSave);
+    ui.toggleSettings(false);
+  } catch (e: any) {
+    ui.showSettingsError(e.message || "Failed to save settings");
+  }
 };
 
 authManager.onAuthStateChanged = (user) => {
@@ -152,6 +135,29 @@ authManager.onSettingsLoaded = (settings) => {
 
 let isPaused = false;
 let lastStateChangeTime = 0;
+let isGameOver = false;
+
+const performRestart = () => {
+  isGameOver = false;
+  ui.toggleGameOver(false);
+
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+
+  player.respawn();
+  if (levelLoader.currentLevelType === 'infinite') {
+    levelLoader.loadLevel('infinite');
+  }
+  document.body.requestPointerLock();
+};
+
+ui.onPlayAgain = performRestart;
+
+ui.leaderboardBtn.addEventListener('click', async () => {
+  const entries = await authManager.getLeaderboard();
+  ui.updateLeaderboard(entries);
+});
 
 let listenersAttached = false;
 
@@ -163,28 +169,34 @@ function setupEventListeners() {
     document.body.requestPointerLock();
   };
 
+  document.addEventListener('click', () => {
+    if (!isGameOver) {
+      document.body.requestPointerLock();
+    }
+  });
+
   document.addEventListener('pointerlockchange', () => {
     lastStateChangeTime = performance.now();
     if (document.pointerLockElement === document.body) {
       isPaused = false;
       ui.toggleMenu(false);
+      if (!isGameOver) ui.toggleGameOver(false);
     } else {
-      isPaused = true;
-      ui.toggleMenu(true);
+      if (!isGameOver) {
+        isPaused = true;
+        ui.toggleMenu(true);
+      }
     }
   });
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyR') {
-      player.respawn();
-      if (levelLoader.currentLevelType === 'infinite') {
-        levelLoader.loadLevel('infinite');
-      }
+      performRestart();
     }
   });
 
   window.addEventListener('keyup', (e) => {
-    if (e.code === 'Escape' && isPaused) {
+    if (e.code === 'Escape' && isPaused && !isGameOver) {
       if (performance.now() - lastStateChangeTime > 100) {
         document.body.requestPointerLock();
       }
@@ -214,7 +226,7 @@ function gameLoop() {
 
   const dt = Math.min(clock.getDelta(), 0.1);
 
-  if (!isPaused) {
+  if (!isPaused && !isGameOver) {
     accumulator += dt;
     while (accumulator >= PHYSICS_STEP) {
       player.savePreviousPosition();
@@ -223,19 +235,25 @@ function gameLoop() {
       player.updatePhysics(PHYSICS_STEP);
       levelLoader.update(player.body.translation().z, player.getSpeed());
 
-      if (player.body.translation().y < CONFIG.deathThreshold) {
-        player.respawn();
-        if (levelLoader.currentLevelType === 'infinite') {
-          levelLoader.loadLevel('infinite');
-        }
-      }
-      accumulator -= PHYSICS_STEP;
+            if (player.body.translation().y < CONFIG.deathThreshold) {
+              if (!isGameOver) {
+                isGameOver = true;
+                document.exitPointerLock();
+      
+                const score = Math.max(0, player.body.translation().z);
+                authManager.saveScore(score).then((result) => {
+                  ui.showGameOver(score, result.currentHighScore, result.isNewHighScore, !!authManager.currentUser);
+                });
+              }
+            }      accumulator -= PHYSICS_STEP;
     }
   }
 
   const alpha = accumulator / PHYSICS_STEP;
-  player.updateVisuals(dt);
-  player.syncCamera(alpha);
+  if (!isPaused && !isGameOver) {
+      player.updateVisuals(dt);
+      player.syncCamera(alpha);
+  }
 
   frameCount++;
   const now = performance.now();
@@ -246,7 +264,8 @@ function gameLoop() {
   }
 
   const speed = player.getSpeed();
-  ui.update(fps, speed);
+  const distance = Math.max(0, player.body.translation().z);
+  ui.update(fps, speed, distance);
 
   renderer.render(scene, camera);
 }

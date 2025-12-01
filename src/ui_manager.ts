@@ -4,6 +4,7 @@ export class UIManager {
   private hud: HTMLElement;
   private hudFps!: HTMLElement;
   private hudSpeed!: HTMLElement;
+  private hudDistance!: HTMLElement;
   private sensInput!: HTMLInputElement;
   private sensVal!: HTMLElement;
   private nickInput!: HTMLInputElement;
@@ -12,6 +13,8 @@ export class UIManager {
   public mainMenu!: HTMLElement;
   public settingsMenu!: HTMLElement;
   public authModal!: HTMLElement;
+  public gameOverMenu!: HTMLElement;
+  public leaderboardMenu!: HTMLElement;
 
   public returnBtn!: HTMLElement;
   public settingsBtn!: HTMLElement;
@@ -21,25 +24,28 @@ export class UIManager {
   public settingsBackBtn!: HTMLElement;
   public settingsApplyBtn!: HTMLElement;
 
+  private lbList!: HTMLElement;
+  private lbBackBtn!: HTMLElement;
+
+  public onPlayAgain: (() => void) | null = null;
+  public onShowLeaderboard: (() => void) | null = null;
+
   public userHeader!: HTMLElement;
   private userDropdown!: HTMLElement;
   private footer!: HTMLElement;
 
-  private authEmailInput!: HTMLInputElement;
-  private authPassInput!: HTMLInputElement;
   private authError!: HTMLElement;
 
   public onResume: (() => void) | null = null;
   public onLoadLevel: ((type: 'playground' | 'infinite') => void) | null = null;
 
   public onLoginGoogleRequest: (() => void) | null = null;
-  public onLoginEmailRequest: ((email: string, pass: string) => void) | null = null;
-  public onRegisterEmailRequest: ((email: string, pass: string) => void) | null = null;
   public onLogoutRequest: (() => void) | null = null;
 
-  public onApplySettings: ((settings: { sensitivity: number, nickname?: string }) => void) | null = null;
+  public onApplySettings: ((settings: { sensitivity: number, nickname?: string }) => Promise<void>) | null = null;
 
   private lastUpdate: number = 0;
+  private lastColor: string = '';
 
   private pendingSensitivity: number;
   private pendingNickname: string = '';
@@ -51,11 +57,12 @@ export class UIManager {
     // --- HUD ---
     this.hud = document.createElement('div');
     this.hud.className = 'hud';
-    this.hud.innerHTML = 'FPS: <span id="hud-fps">0</span><br>Speed: <span id="hud-speed">0.00</span> u/s';
+    this.hud.innerHTML = 'FPS: <span id="hud-fps">0</span><br>Speed: <span id="hud-speed">0.00</span> u/s<br>Dist: <span id="hud-dist">0.00</span>m';
     document.body.appendChild(this.hud);
 
     this.hudFps = this.hud.querySelector('#hud-fps') as HTMLElement;
     this.hudSpeed = this.hud.querySelector('#hud-speed') as HTMLElement;
+    this.hudDistance = this.hud.querySelector('#hud-dist') as HTMLElement;
 
     // --- USER HEADER ---
     this.userHeader = document.createElement('div');
@@ -82,10 +89,14 @@ export class UIManager {
     this.mainMenu = this.createMainMenu();
     this.settingsMenu = this.createSettingsMenu(defaultSensitivity);
     this.authModal = this.createAuthModal();
+    this.gameOverMenu = this.createGameOverMenu();
+    this.leaderboardMenu = this.createLeaderboardMenu();
 
     document.body.appendChild(this.mainMenu);
     document.body.appendChild(this.settingsMenu);
     document.body.appendChild(this.authModal);
+    document.body.appendChild(this.gameOverMenu);
+    document.body.appendChild(this.leaderboardMenu);
 
     // --- FOOTER ---
     this.createFooter();
@@ -155,73 +166,19 @@ export class UIManager {
     menu.className = 'menu-overlay hidden';
 
     menu.innerHTML = `
-      <h1 class="menu-title">Login / Register</h1>
-      <div class="auth-form">
-        <div id="auth-error" class="auth-error hidden"></div>
-        <input type="email" id="auth-email" class="auth-input" placeholder="Email" />
-        <input type="password" id="auth-pass" class="auth-input" placeholder="Password" />
-        <div class="auth-actions">
-          <button id="btn-auth-login" class="menu-btn">Login</button>
-          <button id="btn-auth-register" class="menu-btn">Register</button>
-        </div>
-      </div>
-      <div class="divider"></div>
+      <h1 class="menu-title">Login</h1>
+      <div id="auth-error" class="auth-error hidden"></div>
       <button id="btn-auth-google" class="menu-btn">Login with Google</button>
-      <button id="btn-auth-back" class="menu-btn" style="margin-top: 10px;">Back</button>
+      <button id="btn-auth-back" class="menu-btn btn-top-margin">Back</button>
     `;
 
     menu.addEventListener('click', (e) => e.stopPropagation());
     menu.addEventListener('mousedown', (e) => e.stopPropagation());
 
-    this.authEmailInput = menu.querySelector('#auth-email') as HTMLInputElement;
-    this.authPassInput = menu.querySelector('#auth-pass') as HTMLInputElement;
     this.authError = menu.querySelector('#auth-error') as HTMLElement;
 
-    this.authEmailInput.addEventListener('input', () => this.hideAuthError());
-    this.authPassInput.addEventListener('input', () => this.hideAuthError());
-
-    const btnLogin = menu.querySelector('#btn-auth-login') as HTMLElement;
-    const btnRegister = menu.querySelector('#btn-auth-register') as HTMLElement;
     const btnGoogle = menu.querySelector('#btn-auth-google') as HTMLElement;
     const btnBack = menu.querySelector('#btn-auth-back') as HTMLElement;
-
-    btnLogin.addEventListener('click', () => {
-      this.hideAuthError();
-      const email = this.authEmailInput.value;
-      const pass = this.authPassInput.value;
-
-      if (!email || !pass) {
-        this.showAuthError('Please fill in all fields');
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        this.showAuthError('Invalid email address');
-        return;
-      }
-
-      if (this.onLoginEmailRequest) this.onLoginEmailRequest(email, pass);
-    });
-
-    btnRegister.addEventListener('click', () => {
-      this.hideAuthError();
-      const email = this.authEmailInput.value;
-      const pass = this.authPassInput.value;
-
-      if (!email || !pass) {
-        this.showAuthError('Please fill in all fields');
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        this.showAuthError('Invalid email address');
-        return;
-      }
-      if (pass.length < 6) {
-        this.showAuthError('Password must be at least 6 characters');
-        return;
-      }
-
-      if (this.onRegisterEmailRequest) this.onRegisterEmailRequest(email, pass);
-    });
 
     btnGoogle.addEventListener('click', () => {
       this.hideAuthError();
@@ -233,6 +190,152 @@ export class UIManager {
     });
 
     return menu;
+  }
+
+  private createGameOverMenu(): HTMLElement {
+    const menu = document.createElement('div');
+    menu.id = 'game-over-menu';
+    menu.className = 'menu-overlay hidden';
+
+    menu.innerHTML = `
+      <h1 class="menu-title">GAME OVER</h1>
+      
+      <div id="go-new-record" class="hidden">NEW HIGHSCORE!</div>
+      <div id="go-score">SCORE: 0.00</div>
+      <div id="go-highscore">Highscore: 0.00</div>
+      <div id="go-login-msg" class="hidden">(LOG IN to be visible in leaderboard)</div>
+      
+      <button id="btn-play-again" class="menu-btn">PLAY AGAIN</button>
+    `;
+
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    menu.addEventListener('mousedown', (e) => e.stopPropagation());
+
+    const btnPlayAgain = menu.querySelector('#btn-play-again') as HTMLElement;
+
+    btnPlayAgain.addEventListener('click', () => {
+      if (this.onPlayAgain) this.onPlayAgain();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Enter' && !this.gameOverMenu.classList.contains('hidden')) {
+        if (this.onPlayAgain) this.onPlayAgain();
+      }
+    });
+
+    return menu;
+  }
+
+  private createLeaderboardMenu(): HTMLElement {
+    const menu = document.createElement('div');
+    menu.id = 'leaderboard-menu';
+    menu.className = 'menu-overlay hidden';
+    menu.style.width = '600px';
+
+    menu.innerHTML = `
+      <h1 class="menu-title">Leaderboard</h1>
+      <div class="leaderboard-container">
+        <div class="lb-header">
+          <span>Rank</span>
+          <span>Nickname</span>
+          <span>Score</span>
+        </div>
+        <div id="lb-list" class="lb-list">
+          <!-- Entries injected here -->
+        </div>
+      </div>
+      <button id="btn-lb-back" class="menu-btn btn-top-margin">BACK</button>
+    `;
+
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    menu.addEventListener('mousedown', (e) => e.stopPropagation());
+
+    this.lbList = menu.querySelector('#lb-list') as HTMLElement;
+    this.lbBackBtn = menu.querySelector('#btn-lb-back') as HTMLElement;
+
+    this.lbBackBtn.addEventListener('click', () => {
+      this.leaderboardMenu.classList.add('hidden');
+      this.mainMenu.classList.remove('hidden');
+    });
+
+    return menu;
+  }
+
+  public showGameOver(score: number, highScore: number, isNewRecord: boolean, isLoggedIn: boolean) {
+    const elNewRecord = this.gameOverMenu.querySelector('#go-new-record') as HTMLElement;
+    const elScore = this.gameOverMenu.querySelector('#go-score') as HTMLElement;
+    const elHighscore = this.gameOverMenu.querySelector('#go-highscore') as HTMLElement;
+    const elLoginMsg = this.gameOverMenu.querySelector('#go-login-msg') as HTMLElement;
+
+    elScore.textContent = `SCORE: ${score.toFixed(2)}`;
+    elHighscore.textContent = `Highscore: ${highScore.toFixed(2)}`;
+
+    if (isNewRecord) {
+      elNewRecord.classList.remove('hidden');
+    } else {
+      elNewRecord.classList.add('hidden');
+    }
+
+    if (isLoggedIn) {
+      elLoginMsg.classList.add('hidden');
+    } else {
+      elLoginMsg.classList.remove('hidden');
+    }
+
+    this.toggleGameOver(true);
+  }
+
+  public toggleGameOver(isOpen: boolean) {
+    if (isOpen) {
+      this.mainMenu.classList.add('hidden');
+      this.settingsMenu.classList.add('hidden');
+      this.authModal.classList.add('hidden');
+      this.leaderboardMenu.classList.add('hidden');
+      this.gameOverMenu.classList.remove('hidden');
+      
+      this.footer.classList.remove('hidden');
+      this.userHeader.classList.remove('hidden');
+      this.hud.style.display = 'none';
+      document.exitPointerLock();
+    } else {
+      this.gameOverMenu.classList.add('hidden');
+    }
+  }
+
+  public updateLeaderboard(entries: any[]) {
+    this.lbList.innerHTML = '';
+    
+    if (entries.length === 0) {
+      this.lbList.innerHTML = '<div class="lb-empty">No records yet. Be the first!</div>';
+      return;
+    }
+
+    entries.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'lb-row';
+      
+      if (this.isLoggedIn && this.userHeader.querySelector('#user-nickname')?.textContent === entry.nickname) {
+        row.classList.add('lb-highlight');
+      }
+      
+      const rankSpan = document.createElement('span');
+      rankSpan.className = 'lb-rank';
+      rankSpan.textContent = `#${entry.rank}`;
+
+      const nickSpan = document.createElement('span');
+      nickSpan.className = 'lb-nick';
+      nickSpan.textContent = entry.nickname;
+
+      const scoreSpan = document.createElement('span');
+      scoreSpan.className = 'lb-score';
+      scoreSpan.textContent = entry.score.toFixed(2);
+
+      row.appendChild(rankSpan);
+      row.appendChild(nickSpan);
+      row.appendChild(scoreSpan);
+      
+      this.lbList.appendChild(row);
+    });
   }
 
   public updateUserHeader(user: User | null, nickname?: string) {
@@ -291,6 +394,8 @@ export class UIManager {
       '<span id="sens-val">' + defaultSensitivity + '</span>' +
       '</div>' +
 
+      '<div id="settings-error" class="settings-error hidden"></div>' +
+
       '<div class="settings-actions">' +
       '<button id="btn-settings-back" class="menu-btn">BACK</button>' +
       '<button id="btn-settings-apply" class="menu-btn btn-apply">APPLY</button>' +
@@ -307,8 +412,19 @@ export class UIManager {
 
     this.nickRow = menu.querySelector('#row-nickname') as HTMLElement;
     this.nickInput = menu.querySelector('#nickname-input') as HTMLInputElement;
+    
+    const settingsError = menu.querySelector('#settings-error') as HTMLElement;
+    this.nickInput.addEventListener('input', () => settingsError.classList.add('hidden'));
 
     return menu;
+  }
+
+  public showSettingsError(msg: string) {
+    const el = this.settingsMenu.querySelector('#settings-error') as HTMLElement;
+    if (el) {
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
   }
 
   private setupEventListeners() {
@@ -316,7 +432,11 @@ export class UIManager {
       if (this.onResume) this.onResume();
     });
 
-    this.leaderboardBtn.addEventListener('click', () => console.log('Leaderboard: Not implemented'));
+    this.leaderboardBtn.addEventListener('click', () => {
+      this.mainMenu.classList.add('hidden');
+      this.leaderboardMenu.classList.remove('hidden');
+      if (this.onShowLeaderboard) this.onShowLeaderboard();
+    });
     this.settingsBtn.addEventListener('click', () => this.toggleSettings(true));
     this.visualsBtn.addEventListener('click', () => console.log('Visuals: Not implemented'));
 
@@ -353,6 +473,8 @@ export class UIManager {
       this.mainMenu.classList.remove('hidden');
       this.settingsMenu.classList.add('hidden');
       this.authModal.classList.add('hidden');
+      this.gameOverMenu.classList.add('hidden');
+      this.leaderboardMenu.classList.add('hidden');
       this.footer.classList.remove('hidden');
       this.userHeader.classList.remove('hidden');
       this.hud.style.display = 'none';
@@ -361,6 +483,8 @@ export class UIManager {
       this.mainMenu.classList.add('hidden');
       this.settingsMenu.classList.add('hidden');
       this.authModal.classList.add('hidden');
+      this.gameOverMenu.classList.add('hidden');
+      this.leaderboardMenu.classList.add('hidden');
       this.footer.classList.add('hidden');
       this.userHeader.classList.add('hidden');
 
@@ -373,10 +497,10 @@ export class UIManager {
   public toggleAuthModal(isOpen: boolean) {
     if (isOpen) {
       this.hideAuthError();
-      this.authEmailInput.value = '';
-      this.authPassInput.value = '';
       this.mainMenu.classList.add('hidden');
       this.settingsMenu.classList.add('hidden');
+      this.gameOverMenu.classList.add('hidden');
+      this.leaderboardMenu.classList.add('hidden');
       this.authModal.classList.remove('hidden');
     } else {
       this.authModal.classList.add('hidden');
@@ -407,6 +531,8 @@ export class UIManager {
       }
 
       this.mainMenu.classList.add('hidden');
+      this.gameOverMenu.classList.add('hidden');
+      this.leaderboardMenu.classList.add('hidden');
       this.settingsMenu.classList.remove('hidden');
     } else {
       this.mainMenu.classList.remove('hidden');
@@ -423,13 +549,19 @@ export class UIManager {
     this.nickInput.value = settings.nickname;
   }
 
-  public update(fps: number, speed: number) {
+  public update(fps: number, speed: number, distance: number) {
     if (performance.now() - this.lastUpdate < 50) return;
     this.lastUpdate = performance.now();
 
     const color = speed > 20 ? '#f33' : speed > 12 ? '#ff3' : '#fff';
     this.hudFps.textContent = fps.toString();
     this.hudSpeed.textContent = speed.toFixed(2);
-    this.hudSpeed.style.color = color;
+    
+    if (color !== this.lastColor) {
+      this.hudSpeed.style.color = color;
+      this.lastColor = color;
+    }
+    
+    this.hudDistance.textContent = distance.toFixed(2);
   }
 }
