@@ -50,6 +50,7 @@ export class UIManager {
   private pendingSensitivity: number;
   private pendingNickname: string = '';
   private isLoggedIn: boolean = false;
+  private previousMenu: HTMLElement | null = null;
 
   constructor(defaultSensitivity: number) {
     this.pendingSensitivity = defaultSensitivity;
@@ -140,9 +141,9 @@ export class UIManager {
     menu.className = 'menu-overlay hidden';
 
     const content = document.createElement('div');
-    content.style.width = '100%';
     content.innerHTML =
       '<h1 class="menu-title">Infinite Jumps</h1>' +
+      '<div id="offline-indicator" class="offline-indicator hidden">ONLINE SERVICES UNAVAILABLE</div>' +
       '<button id="btn-return" class="menu-btn">Return</button>' +
       '<button id="btn-leaderboard" class="menu-btn">Leaderboard</button>' +
       '<button id="btn-settings" class="menu-btn">Settings</button>' +
@@ -230,7 +231,6 @@ export class UIManager {
     const menu = document.createElement('div');
     menu.id = 'leaderboard-menu';
     menu.className = 'menu-overlay hidden';
-    menu.style.width = '600px';
 
     menu.innerHTML = `
       <h1 class="menu-title">Leaderboard</h1>
@@ -261,11 +261,21 @@ export class UIManager {
     return menu;
   }
 
+  public setOfflineMode(isOffline: boolean) {
+    const indicator = this.mainMenu.querySelector('#offline-indicator');
+    if (indicator) {
+      if (isOffline) {
+        indicator.classList.remove('hidden');
+      } else {
+        indicator.classList.add('hidden');
+      }
+    }
+  }
+
   public showGameOver(score: number, highScore: number, isNewRecord: boolean, isLoggedIn: boolean) {
     const elNewRecord = this.gameOverMenu.querySelector('#go-new-record') as HTMLElement;
     const elScore = this.gameOverMenu.querySelector('#go-score') as HTMLElement;
     const elHighscore = this.gameOverMenu.querySelector('#go-highscore') as HTMLElement;
-    const elLoginMsg = this.gameOverMenu.querySelector('#go-login-msg') as HTMLElement;
 
     elScore.textContent = `SCORE: ${score.toFixed(2)}`;
     elHighscore.textContent = `Highscore: ${highScore.toFixed(2)}`;
@@ -276,13 +286,17 @@ export class UIManager {
       elNewRecord.classList.add('hidden');
     }
 
+    this.updateGameOverLoginMessage(isLoggedIn);
+    this.toggleGameOver(true);
+  }
+
+  public updateGameOverLoginMessage(isLoggedIn: boolean) {
+    const elLoginMsg = this.gameOverMenu.querySelector('#go-login-msg') as HTMLElement;
     if (isLoggedIn) {
       elLoginMsg.classList.add('hidden');
     } else {
       elLoginMsg.classList.remove('hidden');
     }
-
-    this.toggleGameOver(true);
   }
 
   public toggleGameOver(isOpen: boolean) {
@@ -496,6 +510,13 @@ export class UIManager {
 
   public toggleAuthModal(isOpen: boolean) {
     if (isOpen) {
+      this.previousMenu = [
+        this.mainMenu,
+        this.gameOverMenu,
+        this.settingsMenu,
+        this.leaderboardMenu
+      ].find(m => !m.classList.contains('hidden')) || this.mainMenu;
+
       this.hideAuthError();
       this.mainMenu.classList.add('hidden');
       this.settingsMenu.classList.add('hidden');
@@ -504,7 +525,15 @@ export class UIManager {
       this.authModal.classList.remove('hidden');
     } else {
       this.authModal.classList.add('hidden');
-      this.mainMenu.classList.remove('hidden');
+      if (this.previousMenu) {
+        if (this.previousMenu === this.settingsMenu) {
+          this.toggleSettings(true);
+        } else {
+          this.previousMenu.classList.remove('hidden');
+        }
+      } else {
+        this.mainMenu.classList.remove('hidden');
+      }
     }
   }
 

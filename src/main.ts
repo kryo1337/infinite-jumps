@@ -83,6 +83,9 @@ ui.onLoadLevel = (type) => {
 
 // --- AUTH ---
 const authManager = new AuthManager();
+if (authManager.isOfflineMode) {
+  ui.setOfflineMode(true);
+}
 
 function getFriendlyErrorMessage(code: string): string | null {
   switch (code) {
@@ -114,6 +117,7 @@ ui.onApplySettings = async (settings) => {
     };
 
     await authManager.saveSettings(settingsToSave);
+    ui.updateUserHeader(authManager.currentUser, settingsToSave.nickname);
     ui.toggleSettings(false);
   } catch (e: any) {
     ui.showSettingsError(e.message || "Failed to save settings");
@@ -122,6 +126,7 @@ ui.onApplySettings = async (settings) => {
 
 authManager.onAuthStateChanged = (user) => {
   ui.updateUserHeader(user);
+  ui.updateGameOverLoginMessage(!!user);
   if (user) {
     ui.toggleAuthModal(false);
   }

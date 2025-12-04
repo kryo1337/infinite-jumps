@@ -57,6 +57,7 @@ export class AuthManager {
   private _currentUser: User | null = null;
   public onSettingsLoaded: ((settings: UserSettings) => void) | null = null;
   public onAuthStateChanged: ((user: User | null) => void) | null = null;
+  public isOfflineMode: boolean = false;
 
   private defaultSettings: UserSettings = {
     sensitivity: 1.0,
@@ -79,7 +80,8 @@ export class AuthManager {
         await this.loadSettings();
       });
     } catch (error) {
-      console.warn("Firebase initialization failed (likely due to invalid config). Auth features disabled.", error);
+      console.warn("Firebase initialization failed. Auth features disabled.", error);
+      this.isOfflineMode = true;
     }
   }
 
@@ -103,6 +105,31 @@ export class AuthManager {
     if (!this.auth) { console.warn("Auth not initialized"); return; }
     try {
       await signOut(this.auth);
+
+      localStorage.removeItem('local_highscore');
+
+      const savedStr = localStorage.getItem('kz_settings');
+      let currentSens = 1.0;
+
+      if (savedStr) {
+        try {
+          const parsed = JSON.parse(savedStr);
+          if (typeof parsed.sensitivity === 'number') {
+            currentSens = parsed.sensitivity;
+          }
+        } catch (e) {
+          // fall back to default sensitivity
+        }
+      }
+
+      const cleanSettings: UserSettings = {
+        sensitivity: currentSens,
+        nickname: 'Player'
+      };
+
+      localStorage.setItem('kz_settings', JSON.stringify(cleanSettings));
+      this._currentSettings = { ...cleanSettings };
+
     } catch (error) {
       console.error("Error logging out:", error);
       throw error;
@@ -147,7 +174,8 @@ export class AuthManager {
     }
 
     this._currentSettings = { ...settings };
-    localStorage.setItem('kz_settings', JSON.stringify(settings));
+    const dataToStore = { ...settings, uid: this._currentUser?.uid };
+    localStorage.setItem('kz_settings', JSON.stringify(dataToStore));
 
     if (this._currentUser && this.db) {
       try {
@@ -272,7 +300,14 @@ export class AuthManager {
         const rawSettings = JSON.parse(localStr);
         localSettings = {};
         if (typeof rawSettings.sensitivity === 'number') localSettings.sensitivity = rawSettings.sensitivity;
-        if (typeof rawSettings.nickname === 'string') localSettings.nickname = rawSettings.nickname;
+
+        if (typeof rawSettings.nickname === 'string') {
+          const storedUid = rawSettings.uid;
+          const currentUid = this._currentUser?.uid;
+          if (storedUid === currentUid || (storedUid == null && currentUid == null)) {
+            localSettings.nickname = rawSettings.nickname;
+          }
+        }
 
         if (localSettings.nickname === 'Player' && this._currentUser?.displayName) {
           localSettings.nickname = this._currentUser.displayName.replace(/\s/g, '');
