@@ -37,7 +37,7 @@ export class UIManager {
   private authError!: HTMLElement;
 
   public onResume: (() => void) | null = null;
-  public onLoadLevel: ((type: 'playground' | 'infinite') => void) | null = null;
+  public onLoadLevel: ((type: 'infinite') => void) | null = null;
 
   public onLoginGoogleRequest: (() => void) | null = null;
   public onLogoutRequest: (() => void) | null = null;
@@ -306,7 +306,7 @@ export class UIManager {
       this.authModal.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
       this.gameOverMenu.classList.remove('hidden');
-      
+
       this.footer.classList.remove('hidden');
       this.userHeader.classList.remove('hidden');
       this.hud.style.display = 'none';
@@ -318,7 +318,7 @@ export class UIManager {
 
   public updateLeaderboard(entries: any[]) {
     this.lbList.innerHTML = '';
-    
+
     if (entries.length === 0) {
       this.lbList.innerHTML = '<div class="lb-empty">No records yet. Be the first!</div>';
       return;
@@ -327,11 +327,11 @@ export class UIManager {
     entries.forEach(entry => {
       const row = document.createElement('div');
       row.className = 'lb-row';
-      
+
       if (this.isLoggedIn && this.userHeader.querySelector('#user-nickname')?.textContent === entry.nickname) {
         row.classList.add('lb-highlight');
       }
-      
+
       const rankSpan = document.createElement('span');
       rankSpan.className = 'lb-rank';
       rankSpan.textContent = `#${entry.rank}`;
@@ -347,7 +347,7 @@ export class UIManager {
       row.appendChild(rankSpan);
       row.appendChild(nickSpan);
       row.appendChild(scoreSpan);
-      
+
       this.lbList.appendChild(row);
     });
   }
@@ -426,7 +426,7 @@ export class UIManager {
 
     this.nickRow = menu.querySelector('#row-nickname') as HTMLElement;
     this.nickInput = menu.querySelector('#nickname-input') as HTMLInputElement;
-    
+
     const settingsError = menu.querySelector('#settings-error') as HTMLElement;
     this.nickInput.addEventListener('input', () => settingsError.classList.add('hidden'));
 
@@ -585,12 +585,12 @@ export class UIManager {
     const color = speed > 20 ? '#f33' : speed > 12 ? '#ff3' : '#fff';
     this.hudFps.textContent = fps.toString();
     this.hudSpeed.textContent = speed.toFixed(2);
-    
+
     if (color !== this.lastColor) {
       this.hudSpeed.style.color = color;
       this.lastColor = color;
     }
-    
+
     this.hudDistance.textContent = distance.toFixed(2);
   }
 }

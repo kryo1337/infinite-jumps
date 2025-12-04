@@ -9,7 +9,7 @@ import { AuthManager } from './auth_manager';
 
 // --- CONFIG ---
 const CONFIG = {
-  initialLevel: 'infinite' as 'playground' | 'infinite',
+  initialLevel: 'infinite' as 'infinite',
   fov: 90,
   defaultSensitivity: 1.0,
   gravity: { x: 0.0, y: -16.0, z: 0.0 },
@@ -74,7 +74,7 @@ const player = new PlayerController(camera, document.body, world, {
 const ui = new UIManager(CONFIG.defaultSensitivity);
 
 ui.onLoadLevel = (type) => {
-  if (type === 'playground' || type === 'infinite') {
+  if (type === 'infinite') {
     levelLoader.loadLevel(type);
     player.respawn();
     document.body.requestPointerLock();
@@ -151,9 +151,7 @@ const performRestart = () => {
   }
 
   player.respawn();
-  if (levelLoader.currentLevelType === 'infinite') {
-    levelLoader.loadLevel('infinite');
-  }
+  levelLoader.loadLevel('infinite');
   document.body.requestPointerLock();
 };
 
@@ -240,24 +238,24 @@ function gameLoop() {
       player.updatePhysics(PHYSICS_STEP);
       levelLoader.update(player.body.translation().z, player.getSpeed());
 
-            if (player.body.translation().y < CONFIG.deathThreshold) {
-              if (!isGameOver) {
-                isGameOver = true;
-                document.exitPointerLock();
-      
-                const score = Math.max(0, player.body.translation().z);
-                authManager.saveScore(score).then((result) => {
-                  ui.showGameOver(score, result.currentHighScore, result.isNewHighScore, !!authManager.currentUser);
-                });
-              }
-            }      accumulator -= PHYSICS_STEP;
+      if (player.body.translation().y < CONFIG.deathThreshold) {
+        if (!isGameOver) {
+          isGameOver = true;
+          document.exitPointerLock();
+
+          const score = Math.max(0, player.body.translation().z);
+          authManager.saveScore(score).then((result) => {
+            ui.showGameOver(score, result.currentHighScore, result.isNewHighScore, !!authManager.currentUser);
+          });
+        }
+      } accumulator -= PHYSICS_STEP;
     }
   }
 
   const alpha = accumulator / PHYSICS_STEP;
   if (!isPaused && !isGameOver) {
-      player.updateVisuals(dt);
-      player.syncCamera(alpha);
+    player.updateVisuals(dt);
+    player.syncCamera(alpha);
   }
 
   frameCount++;

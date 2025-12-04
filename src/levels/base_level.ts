@@ -1,53 +1,44 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Chunk } from './chunk';
-
-const SHARED_BOX_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
+import { ChunkManager } from './chunk_manager';
 
 export abstract class BaseLevel {
   protected scene: THREE.Scene;
   protected world: RAPIER.World;
+  protected chunkManager: ChunkManager;
   protected activeChunks: Chunk[] = [];
-  protected inactiveChunks: Chunk[] = [];
 
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
     this.world = world;
+    this.chunkManager = new ChunkManager(scene, world);
   }
 
   public abstract load(): void;
   public abstract update(playerZ: number, playerSpeed: number): void;
 
   public dispose() {
-    this.activeChunks.forEach(chunk => this.releaseChunk(chunk));
+    this.activeChunks.forEach(chunk => this.chunkManager.releaseChunk(chunk));
     this.activeChunks = [];
-
-    this.inactiveChunks.forEach(chunk => chunk.destroy());
-    this.inactiveChunks = [];
+    this.chunkManager.dispose();
   }
 
   protected spawnBlock(pos: { x: number, y: number, z: number }, size: [number, number, number], color: number): Chunk {
-    let chunk: Chunk | undefined = this.inactiveChunks.pop();
-
-    if (!chunk) {
-      const material = new THREE.MeshStandardMaterial();
-      const mesh = new THREE.Mesh(SHARED_BOX_GEOMETRY, material);
-
-      const bodyDesc = RAPIER.RigidBodyDesc.fixed();
-      const body = this.world.createRigidBody(bodyDesc);
-      const colliderDesc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
-      const collider = this.world.createCollider(colliderDesc, body);
-
-      chunk = new Chunk(mesh, body, collider, this.scene, this.world);
+    const chunk = this.chunkManager.spawnChunk(
+      'box',
+      size,
+      pos,
+      { x: 0, y: 0, z: 0, w: 1 },
+      color
+    );
+    if (chunk) {
+      this.activeChunks.push(chunk);
     }
-
-    chunk.activate(pos, size, color);
-    this.activeChunks.push(chunk);
     return chunk;
   }
 
   protected releaseChunk(chunk: Chunk) {
-    chunk.deactivate();
-    this.inactiveChunks.push(chunk);
+    this.chunkManager.releaseChunk(chunk);
   }
 }

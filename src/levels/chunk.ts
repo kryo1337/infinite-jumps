@@ -2,46 +2,57 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 
 export class Chunk {
+  public type: string;
   public mesh: THREE.Mesh;
   public body: RAPIER.RigidBody;
   public collider: RAPIER.Collider;
   private scene: THREE.Scene;
   private world: RAPIER.World;
-  private currentSize: [number, number, number] | null = null;
 
   constructor(
-    mesh: THREE.Mesh,
-    body: RAPIER.RigidBody,
-    collider: RAPIER.Collider,
+    type: string,
     scene: THREE.Scene,
-    world: RAPIER.World
+    world: RAPIER.World,
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    colliderDesc: RAPIER.ColliderDesc
   ) {
-    this.mesh = mesh;
-    this.body = body;
-    this.collider = collider;
+    this.type = type;
     this.scene = scene;
     this.world = world;
+
+    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh.visible = false;
+
+    const bodyDesc = RAPIER.RigidBodyDesc.fixed();
+    this.body = this.world.createRigidBody(bodyDesc);
+    this.body.setEnabled(false);
+
+    this.collider = this.world.createCollider(colliderDesc, this.body);
   }
 
-  public activate(pos: { x: number, y: number, z: number }, size: [number, number, number], color: number) {
+  public activate(
+    pos: { x: number, y: number, z: number },
+    rot: { x: number, y: number, z: number, w: number },
+    color: number
+  ) {
     this.mesh.position.set(pos.x, pos.y, pos.z);
-    this.mesh.scale.set(size[0], size[1], size[2]);
-    (this.mesh.material as THREE.MeshStandardMaterial).color.setHex(color);
+    this.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+
+    if (Array.isArray(this.mesh.material)) {
+      this.mesh.material.forEach((m) => {
+        if (m instanceof THREE.MeshStandardMaterial) m.color.setHex(color);
+      });
+    } else if (this.mesh.material instanceof THREE.MeshStandardMaterial) {
+      this.mesh.material.color.setHex(color);
+    }
+
     this.mesh.visible = true;
     this.scene.add(this.mesh);
 
     this.body.setTranslation(pos, true);
+    this.body.setRotation(rot, true);
     this.body.setEnabled(true);
-
-    if (
-      !this.currentSize ||
-      this.currentSize[0] !== size[0] ||
-      this.currentSize[1] !== size[1] ||
-      this.currentSize[2] !== size[2]
-    ) {
-      this.collider.setShape(new RAPIER.Cuboid(size[0] / 2, size[1] / 2, size[2] / 2));
-      this.currentSize = [size[0], size[1], size[2]];
-    }
   }
 
   public deactivate() {

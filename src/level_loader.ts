@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { BaseLevel } from './levels/base_level';
-import { PlaygroundLevel } from './levels/playground';
 import { InfiniteLevel } from './levels/infinite';
 
-export type LevelType = 'playground' | 'infinite';
+export type LevelType = 'infinite';
 
 export class LevelLoader {
   private scene: THREE.Scene;
@@ -28,9 +27,7 @@ export class LevelLoader {
       this.currentLevel = null;
     }
 
-    if (levelType === 'playground') {
-      this.currentLevel = new PlaygroundLevel(this.scene, this.world);
-    } else if (levelType === 'infinite') {
+    if (levelType === 'infinite') {
       this.currentLevel = new InfiniteLevel(this.scene, this.world);
     }
 
