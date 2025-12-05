@@ -6,6 +6,7 @@ import { PlayerController } from './player';
 import { LevelLoader } from './level_loader';
 import { UIManager } from './ui_manager';
 import { AuthManager } from './auth_manager';
+import { ModelLoader } from './utils/model_loader';
 
 // --- CONFIG ---
 const CONFIG = {
@@ -60,6 +61,13 @@ scene.add(dirLight);
 // --- PHYSICS INIT ---
 await RAPIER.init();
 const world = new RAPIER.World(CONFIG.gravity);
+
+// --- PRELOAD MODELS ---
+try {
+  await ModelLoader.load('/models/rampdown.glb');
+} catch (error) {
+  console.error('Failed to preload rampdown model:', error);
+}
 
 // --- WORLD GEN ---
 const levelLoader = new LevelLoader(scene, world);
@@ -236,9 +244,26 @@ function gameLoop() {
       world.timestep = PHYSICS_STEP;
       world.step();
       player.updatePhysics(PHYSICS_STEP);
-      levelLoader.update(player.body.translation().z, player.getSpeed());
+      levelLoader.update(player.body.translation().z, player.getSpeed(), player.body.translation().y);
 
-      if (player.body.translation().y < CONFIG.deathThreshold) {
+      const isDeadlyCollision = player.groundColliderHandle !== undefined && levelLoader.checkDeathCollision(player.groundColliderHandle);
+      const isFallen = player.body.translation().y < (levelLoader.getMinY() + CONFIG.deathThreshold);
+
+      if (player.groundColliderHandle !== undefined) {
+        const teleportOffset = levelLoader.getTeleportOffset(player.groundColliderHandle);
+        if (teleportOffset) {
+          const currentPos = player.body.translation();
+          const newPos = {
+            x: currentPos.x + teleportOffset.x,
+            y: currentPos.y + teleportOffset.y,
+            z: currentPos.z + teleportOffset.z
+          };
+          player.teleport(newPos);
+          levelLoader.setMinYThreshold(newPos.y - 50);
+        }
+      }
+
+      if (isDeadlyCollision || isFallen) {
         if (!isGameOver) {
           isGameOver = true;
           document.exitPointerLock();

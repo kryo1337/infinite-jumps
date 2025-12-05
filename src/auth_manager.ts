@@ -80,7 +80,6 @@ export class AuthManager {
         await this.loadSettings();
       });
     } catch (error) {
-      console.warn("Firebase initialization failed. Auth features disabled.", error);
       this.isOfflineMode = true;
     }
   }
@@ -90,7 +89,7 @@ export class AuthManager {
   }
 
   public async loginWithGoogle(): Promise<void> {
-    if (!this.auth) { console.warn("Auth not initialized"); return; }
+    if (!this.auth) { return; }
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(this.auth, provider);
@@ -102,7 +101,7 @@ export class AuthManager {
   }
 
   public async logout(): Promise<void> {
-    if (!this.auth) { console.warn("Auth not initialized"); return; }
+    if (!this.auth) { return; }
     try {
       await signOut(this.auth);
 
@@ -188,7 +187,6 @@ export class AuthManager {
           await setDoc(scoreRef, { nickname: settings.nickname }, { merge: true });
         }
 
-        console.log('Settings saved to Firestore');
       } catch (error) {
         console.error('Error saving settings to Firestore:', error);
         throw error;
@@ -327,10 +325,7 @@ export class AuthManager {
         if (docSnap.exists()) {
           const data = docSnap.data() as Partial<UserSettings>;
           settings = { ...settings, ...data };
-          console.log('Settings loaded from Firestore');
         } else {
-          console.log('New user detected (or missing doc). Creating default settings in cloud...');
-
           if (settings.nickname === 'Player' && this._currentUser.displayName) {
             settings.nickname = this._currentUser.displayName.replace(/\s/g, '');
           }
@@ -354,7 +349,6 @@ export class AuthManager {
     if (this._currentUser && this.db) {
       const localHigh = parseInt(localStorage.getItem('local_highscore') || '0', 10);
       if (localHigh > 0) {
-        console.log('Syncing local highscore to cloud...');
         await this.saveScore(localHigh);
       }
     }

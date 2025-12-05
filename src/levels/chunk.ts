@@ -3,25 +3,39 @@ import RAPIER from '@dimforge/rapier3d-compat';
 
 export class Chunk {
   public type: string;
-  public mesh: THREE.Mesh;
+  public mesh: THREE.Object3D;
   public body: RAPIER.RigidBody;
   public collider: RAPIER.Collider;
+  public isDeadly: boolean = false;
+  public teleportOffset: THREE.Vector3 | null = null;
+  public logicalId: number = -1;
   private scene: THREE.Scene;
   private world: RAPIER.World;
+  private isModel: boolean = false;
 
   constructor(
     type: string,
     scene: THREE.Scene,
     world: RAPIER.World,
-    geometry: THREE.BufferGeometry,
-    material: THREE.Material,
-    colliderDesc: RAPIER.ColliderDesc
+    geometry: THREE.BufferGeometry | null,
+    material: THREE.Material | null,
+    colliderDesc: RAPIER.ColliderDesc,
+    model?: THREE.Object3D
   ) {
     this.type = type;
     this.scene = scene;
     this.world = world;
 
-    this.mesh = new THREE.Mesh(geometry, material);
+    if (model) {
+      this.mesh = model;
+      this.isModel = true;
+    } else {
+      if (!geometry || !material) {
+        throw new Error('Chunk requires either a model or geometry+material');
+      }
+      this.mesh = new THREE.Mesh(geometry, material);
+      this.isModel = false;
+    }
     this.mesh.visible = false;
 
     const bodyDesc = RAPIER.RigidBodyDesc.fixed();
@@ -36,16 +50,25 @@ export class Chunk {
     rot: { x: number, y: number, z: number, w: number },
     color: number
   ) {
+    this.isDeadly = false;
+    this.teleportOffset = null;
+    this.logicalId = -1;
     this.mesh.position.set(pos.x, pos.y, pos.z);
     this.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
 
-    if (Array.isArray(this.mesh.material)) {
-      this.mesh.material.forEach((m) => {
-        if (m instanceof THREE.MeshStandardMaterial) m.color.setHex(color);
-      });
-    } else if (this.mesh.material instanceof THREE.MeshStandardMaterial) {
-      this.mesh.material.color.setHex(color);
-    }
+    this.mesh.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.frustumCulled = false;
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((m) => {
+            if ((m as any).color) (m as any).color.setHex(color);
+          });
+        } else if (mesh.material && (mesh.material as any).color) {
+          (mesh.material as any).color.setHex(color);
+        }
+      }
+    });
 
     this.mesh.visible = true;
     this.scene.add(this.mesh);
@@ -65,11 +88,19 @@ export class Chunk {
     this.deactivate();
     this.world.removeRigidBody(this.body);
 
-    if (Array.isArray(this.mesh.material)) {
-      this.mesh.material.forEach(m => m.dispose());
-    } else if (this.mesh.material) {
-      this.mesh.material.dispose();
-    }
+    this.mesh.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+
+        if (!this.isModel) {
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((m) => m.dispose());
+          } else if (mesh.material) {
+            mesh.material.dispose();
+          }
+        }
+      }
+    });
   }
 }
 

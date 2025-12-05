@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Chunk } from './chunk';
 import { ShapeFactory } from './shape_factory';
+import { ModelLoader } from '../utils/model_loader';
 
 export class ChunkManager {
   private scene: THREE.Scene;
@@ -14,6 +15,10 @@ export class ChunkManager {
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
     this.world = world;
+  }
+
+  public preloadModel(path: string) {
+    ModelLoader.load(path);
   }
 
   public spawnChunk(
@@ -40,49 +45,80 @@ export class ChunkManager {
     let chunk = pool.pop();
 
     if (!chunk) {
-      let geometry = this.geometryCache.get(key);
+      let geometry: THREE.BufferGeometry | null = null;
+      let material: THREE.Material | null = null;
+      let model: THREE.Object3D | undefined = undefined;
       let colliderDesc: RAPIER.ColliderDesc;
 
-      if (!geometry) {
-        switch (type) {
-          case 'box':
-            geometry = ShapeFactory.createBox(size[0], size[1], size[2]);
-            colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
-            break;
-          case 'ramp':
-            geometry = ShapeFactory.createRamp(size[0], size[1], size[2]);
-            colliderDesc = ShapeFactory.createRampCollider(size[0], size[1], size[2]);
-            break;
-          case 'cross':
-            const armW = extraParams.armWidth || size[0] / 3;
-            const thickness = size[2];
-            geometry = ShapeFactory.createCross(size[0], armW, thickness);
-            colliderDesc = ShapeFactory.createCrossCollider(size[0], armW, thickness);
-            break;
-          default:
-            throw new Error(`Unknown chunk type: ${type}`);
+      if (type === 'down_ramp') {
+        const path = extraParams.modelPath || '/models/rampdown.glb';
+        model = ModelLoader.get(path);
+        if (model) {
+          const box = new THREE.Box3().setFromObject(model);
+          const modelSize = new THREE.Vector3();
+          box.getSize(modelSize);
+
+          if (modelSize.x > 0) model.scale.x = size[0] / modelSize.x;
+          if (modelSize.y > 0) model.scale.y = size[1] / modelSize.y;
+          if (modelSize.z > 0) model.scale.z = size[2] / modelSize.z;
+
+          model.updateMatrixWorld(true);
+
+          const trimesh = ModelLoader.createTrimeshFromModel(model);
+          if (trimesh) {
+            colliderDesc = trimesh;
+          } else {
+            colliderDesc = ModelLoader.createColliderFromModel(model);
+          }
+        } else {
+          geometry = ShapeFactory.createBox(size[0], size[1], size[2]);
+          material = new THREE.MeshStandardMaterial();
+          colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
         }
-        this.geometryCache.set(key, geometry);
       } else {
-        switch (type) {
-          case 'box':
-            colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
-            break;
-          case 'ramp':
-            colliderDesc = ShapeFactory.createRampCollider(size[0], size[1], size[2]);
-            break;
-          case 'cross':
-            const armW = extraParams.armWidth || size[0] / 3;
-            const thickness = size[2];
-            colliderDesc = ShapeFactory.createCrossCollider(size[0], armW, thickness);
-            break;
-          default:
-            colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
+        geometry = this.geometryCache.get(key) || null;
+
+        if (!geometry) {
+          switch (type) {
+            case 'box':
+              geometry = ShapeFactory.createBox(size[0], size[1], size[2]);
+              colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
+              break;
+            case 'ramp':
+              geometry = ShapeFactory.createRamp(size[0], size[1], size[2]);
+              colliderDesc = ShapeFactory.createRampCollider(size[0], size[1], size[2]);
+              break;
+            case 'cross':
+              const armW = extraParams.armWidth || size[0] / 3;
+              const thickness = size[2];
+              geometry = ShapeFactory.createCross(size[0], armW, thickness);
+              colliderDesc = ShapeFactory.createCrossCollider(size[0], armW, thickness);
+              break;
+            default:
+              throw new Error(`Unknown chunk type: ${type}`);
+          }
+          this.geometryCache.set(key, geometry);
+        } else {
+          switch (type) {
+            case 'box':
+              colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
+              break;
+            case 'ramp':
+              colliderDesc = ShapeFactory.createRampCollider(size[0], size[1], size[2]);
+              break;
+            case 'cross':
+              const armW = extraParams.armWidth || size[0] / 3;
+              const thickness = size[2];
+              colliderDesc = ShapeFactory.createCrossCollider(size[0], armW, thickness);
+              break;
+            default:
+              colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
+          }
         }
+        material = new THREE.MeshStandardMaterial();
       }
 
-      const material = new THREE.MeshStandardMaterial();
-      chunk = new Chunk(key, this.scene, this.world, geometry, material, colliderDesc);
+      chunk = new Chunk(key, this.scene, this.world, geometry, material, colliderDesc, model);
     }
 
     chunk.activate(pos, rot, color);

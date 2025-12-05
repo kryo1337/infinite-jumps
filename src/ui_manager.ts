@@ -452,7 +452,7 @@ export class UIManager {
       if (this.onShowLeaderboard) this.onShowLeaderboard();
     });
     this.settingsBtn.addEventListener('click', () => this.toggleSettings(true));
-    this.visualsBtn.addEventListener('click', () => console.log('Visuals: Not implemented'));
+    this.visualsBtn.addEventListener('click', () => { });
 
     this.settingsBackBtn.addEventListener('click', () => {
       this.sensInput.value = this.pendingSensitivity.toString();

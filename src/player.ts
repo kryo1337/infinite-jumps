@@ -49,6 +49,7 @@ export class PlayerController {
   public body!: RAPIER.RigidBody;
   public collider!: RAPIER.Collider;
   public config: PlayerConfig;
+  public groundColliderHandle: number | undefined;
 
   private input: PlayerInput = { forward: 0, right: 0, jump: false };
   private keys = new Set<string>();
@@ -256,6 +257,11 @@ export class PlayerController {
     this.syncCamera(1.0);
   }
 
+  public teleport(pos: { x: number, y: number, z: number }) {
+    this.body.setTranslation(pos, true);
+    this.previousPosition.set(pos.x, pos.y, pos.z);
+  }
+
   private updateInputState() {
     this.input.forward = (this.keys.has(PlayerController.ACTIONS.FORWARD) ? 1 : 0) - (this.keys.has(PlayerController.ACTIONS.BACKWARD) ? 1 : 0);
     this.input.right = (this.keys.has(PlayerController.ACTIONS.RIGHT) ? 1 : 0) - (this.keys.has(PlayerController.ACTIONS.LEFT) ? 1 : 0);
@@ -267,6 +273,7 @@ export class PlayerController {
     this.isGrounded = false;
     this.isSurfing = false;
     this.surfNormal.set(0, 0, 0);
+    this.groundColliderHandle = undefined;
 
     const pos = this.body.translation();
 
@@ -291,6 +298,7 @@ export class PlayerController {
 
       if (slopeAngle < PlayerController.SURF_MAX_ANGLE) {
         this.isGrounded = true;
+        this.groundColliderHandle = rayHit.collider.handle;
         return;
       }
     }
@@ -313,6 +321,8 @@ export class PlayerController {
       if (!n) return;
 
       if (Math.abs(n.x) < 0.0001 && Math.abs(n.y) < 0.0001 && Math.abs(n.z) < 0.0001) return;
+
+      this.groundColliderHandle = shapeHit.collider.handle;
 
       const slopeAngle = Math.acos(THREE.MathUtils.clamp(n.y, -1, 1));
 

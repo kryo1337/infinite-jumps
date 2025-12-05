@@ -36,9 +36,33 @@ export class LevelLoader {
     }
   }
 
-  public update(playerZ: number, playerSpeed: number) {
+  public update(playerZ: number, playerSpeed: number, playerY: number) {
     if (this.currentLevel) {
-      this.currentLevel.update(playerZ, playerSpeed);
+      this.currentLevel.update(playerZ, playerSpeed, playerY);
+    }
+  }
+
+  public getMinY(): number {
+    return this.currentLevel ? this.currentLevel.getMinY() : 0;
+  }
+
+  public checkDeathCollision(handle: number): boolean {
+    if (this.currentLevel) {
+      return this.currentLevel.isChunkDeadly(handle);
+    }
+    return false;
+  }
+
+  public getTeleportOffset(handle: number): THREE.Vector3 | null {
+    if (this.currentLevel) {
+      return this.currentLevel.getChunkTeleportOffset(handle);
+    }
+    return null;
+  }
+
+  public setMinYThreshold(y: number) {
+    if (this.currentLevel) {
+      this.currentLevel.setMinYThreshold(y);
     }
   }
 }
