@@ -47,6 +47,8 @@ export interface ScoreResult {
 export interface UserSettings {
   sensitivity: number;
   nickname: string;
+  fpsLimit: number;
+  keybindings: { [action: string]: string[] };
 }
 
 export class AuthManager {
@@ -61,7 +63,16 @@ export class AuthManager {
 
   private defaultSettings: UserSettings = {
     sensitivity: 1.0,
-    nickname: 'Player'
+    nickname: 'Player',
+    fpsLimit: -1, // -1 indicates Monitor Rate or Unlimited
+    keybindings: {
+      forward: ['KeyW'],
+      backward: ['KeyS'],
+      left: ['KeyA'],
+      right: ['KeyD'],
+      jump: ['Space', 'WheelUp', 'WheelDown'],
+      reset: ['KeyR']
+    }
   };
 
   private _currentSettings: UserSettings = { ...this.defaultSettings };
@@ -86,6 +97,10 @@ export class AuthManager {
 
   public get currentUser(): User | null {
     return this._currentUser;
+  }
+
+  public get settings(): UserSettings {
+    return this._currentSettings;
   }
 
   public async loginWithGoogle(): Promise<void> {
@@ -123,7 +138,9 @@ export class AuthManager {
 
       const cleanSettings: UserSettings = {
         sensitivity: currentSens,
-        nickname: 'Player'
+        nickname: 'Player',
+        fpsLimit: this.defaultSettings.fpsLimit,
+        keybindings: { ...this.defaultSettings.keybindings }
       };
 
       localStorage.setItem('kz_settings', JSON.stringify(cleanSettings));
@@ -287,7 +304,7 @@ export class AuthManager {
 
   private async loadSettings(): Promise<void> {
     let settings: UserSettings = {
-      sensitivity: 1.0,
+      ...this.defaultSettings,
       nickname: this._currentUser?.displayName || 'Player'
     };
 
@@ -298,6 +315,10 @@ export class AuthManager {
         const rawSettings = JSON.parse(localStr);
         localSettings = {};
         if (typeof rawSettings.sensitivity === 'number') localSettings.sensitivity = rawSettings.sensitivity;
+        if (typeof rawSettings.fpsLimit === 'number') localSettings.fpsLimit = rawSettings.fpsLimit;
+        if (rawSettings.keybindings) {
+          localSettings.keybindings = { ...this.defaultSettings.keybindings, ...rawSettings.keybindings };
+        }
 
         if (typeof rawSettings.nickname === 'string') {
           const storedUid = rawSettings.uid;

@@ -10,6 +10,7 @@ export interface PlayerConfig {
   jumpImpulse: number;
   mouseSensitivity: number;
   autoJump: boolean;
+  keybindings?: { [action: string]: string[] };
 }
 
 interface PlayerInput {
@@ -53,7 +54,9 @@ export class PlayerController {
 
   private input: PlayerInput = { forward: 0, right: 0, jump: false };
   private keys = new Set<string>();
+  private transientActions = new Set<string>();
   private jumpQueued: boolean = false;
+  private keybindings: { [action: string]: string[] };
 
   private pitch: number = 0;
   private yaw: number = 0;
@@ -95,6 +98,13 @@ export class PlayerController {
       mouseSensitivity: options.mouseSensitivity ?? 1.0,
       autoJump: options.autoJump ?? true,
     };
+    this.keybindings = options.keybindings || {
+      [PlayerController.ACTIONS.FORWARD]: ['KeyW'],
+      [PlayerController.ACTIONS.BACKWARD]: ['KeyS'],
+      [PlayerController.ACTIONS.LEFT]: ['KeyA'],
+      [PlayerController.ACTIONS.RIGHT]: ['KeyD'],
+      [PlayerController.ACTIONS.JUMP]: ['Space', 'WheelUp', 'WheelDown']
+    };
 
     const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
     this.pitch = euler.x;
@@ -131,28 +141,37 @@ export class PlayerController {
   }
 
   private setupInput() {
-    const keyMap: Record<string, string> = {
-      keyw: PlayerController.ACTIONS.FORWARD,
-      keys: PlayerController.ACTIONS.BACKWARD,
-      keya: PlayerController.ACTIONS.LEFT,
-      keyd: PlayerController.ACTIONS.RIGHT,
-      space: PlayerController.ACTIONS.JUMP,
-    };
-
     document.addEventListener('keydown', (e: KeyboardEvent) => {
-      const action = keyMap[e.code.toLowerCase()];
-      if (action) {
-        this.keys.add(action);
-        if (action === PlayerController.ACTIONS.JUMP) {
-          this.jumpQueued = true;
-        }
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      this.keys.add(e.code);
+
+      if (this.isActionActive(PlayerController.ACTIONS.JUMP)) {
+        this.jumpQueued = true;
       }
     });
 
     document.addEventListener('keyup', (e: KeyboardEvent) => {
-      const action = keyMap[e.code.toLowerCase()];
-      if (action) this.keys.delete(action);
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      this.keys.delete(e.code);
     });
+
+    document.addEventListener('wheel', (e: WheelEvent) => {
+      if (document.pointerLockElement !== this.domElement) return;
+      const key = e.deltaY < 0 ? 'WheelUp' : 'WheelDown';
+
+      for (const [action, keys] of Object.entries(this.keybindings)) {
+        if (keys.includes(key)) {
+          this.transientActions.add(action);
+          if (action === PlayerController.ACTIONS.JUMP) {
+            this.jumpQueued = true;
+          }
+        }
+      }
+    }, { passive: false });
 
     document.addEventListener('mousemove', (e: MouseEvent) => {
       if (document.pointerLockElement !== this.domElement) return;
@@ -262,11 +281,27 @@ export class PlayerController {
     this.previousPosition.set(pos.x, pos.y, pos.z);
   }
 
+  public setKeybindings(bindings: { [action: string]: string[] }) {
+    this.keybindings = bindings;
+  }
+
+  private isActionActive(action: string): boolean {
+    if (this.transientActions.has(action)) return true;
+    const keys = this.keybindings[action];
+    if (!keys) return false;
+    for (const key of keys) {
+      if (this.keys.has(key)) return true;
+    }
+    return false;
+  }
+
   private updateInputState() {
-    this.input.forward = (this.keys.has(PlayerController.ACTIONS.FORWARD) ? 1 : 0) - (this.keys.has(PlayerController.ACTIONS.BACKWARD) ? 1 : 0);
-    this.input.right = (this.keys.has(PlayerController.ACTIONS.RIGHT) ? 1 : 0) - (this.keys.has(PlayerController.ACTIONS.LEFT) ? 1 : 0);
-    this.input.jump = this.keys.has(PlayerController.ACTIONS.JUMP) || this.jumpQueued;
+    this.input.forward = (this.isActionActive(PlayerController.ACTIONS.FORWARD) ? 1 : 0) - (this.isActionActive(PlayerController.ACTIONS.BACKWARD) ? 1 : 0);
+    this.input.right = (this.isActionActive(PlayerController.ACTIONS.RIGHT) ? 1 : 0) - (this.isActionActive(PlayerController.ACTIONS.LEFT) ? 1 : 0);
+    this.input.jump = this.isActionActive(PlayerController.ACTIONS.JUMP) || this.jumpQueued;
+
     this.jumpQueued = false;
+    this.transientActions.clear();
   }
 
   private scanSurroundings() {

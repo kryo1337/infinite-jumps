@@ -5,8 +5,6 @@ export class UIManager {
   private hudFps!: HTMLElement;
   private hudSpeed!: HTMLElement;
   private hudDistance!: HTMLElement;
-  private sensInput!: HTMLInputElement;
-  private sensVal!: HTMLElement;
   private nickInput!: HTMLInputElement;
   private nickRow!: HTMLElement;
 
@@ -42,15 +40,33 @@ export class UIManager {
   public onLoginGoogleRequest: (() => void) | null = null;
   public onLogoutRequest: (() => void) | null = null;
 
-  public onApplySettings: ((settings: { sensitivity: number, nickname?: string }) => Promise<void>) | null = null;
+  public onApplySettings: ((settings: { sensitivity: number, nickname?: string, fpsLimit: number, keybindings: { [action: string]: string[] } }) => Promise<void>) | null = null;
 
   private lastUpdate: number = 0;
   private lastColor: string = '';
 
   private pendingSensitivity: number;
+  private pendingFpsLimit: number = -1;
   private pendingNickname: string = '';
+  private pendingKeybindings: { [action: string]: string[] } = {};
+  private cleanKeybindings: { [action: string]: string[] } = {};
+  private bindingCleanup: (() => void) | null = null;
+  public isBinding: boolean = false;
+
   private isLoggedIn: boolean = false;
   private previousMenu: HTMLElement | null = null;
+
+  public lastBindingTime: number = 0;
+  private vsyncOnBtn!: HTMLElement;
+  private vsyncOffBtn!: HTMLElement;
+  private fpsInput!: HTMLInputElement;
+  private fpsVal!: HTMLElement;
+  private sensInput!: HTMLInputElement;
+  private sensVal!: HTMLElement;
+  private bindButtons: HTMLElement[] = [];
+  private bindWarning!: HTMLElement;
+
+  private isVsyncEnabled: boolean = false;
 
   constructor(defaultSensitivity: number) {
     this.pendingSensitivity = defaultSensitivity;
@@ -84,8 +100,6 @@ export class UIManager {
       }
     });
 
-    this.updateUserHeader(null);
-
     // --- MENUS ---
     this.mainMenu = this.createMainMenu();
     this.settingsMenu = this.createSettingsMenu(defaultSensitivity);
@@ -106,6 +120,8 @@ export class UIManager {
     const crosshair = document.createElement('div');
     crosshair.id = 'crosshair';
     document.body.appendChild(crosshair);
+
+    this.updateUserHeader(null);
 
     this.setupEventListeners();
   }
@@ -354,6 +370,7 @@ export class UIManager {
 
   public updateUserHeader(user: User | null, nickname?: string) {
     this.isLoggedIn = !!user;
+    this.updateSettingsVisibility();
     this.userHeader.innerHTML = '';
     if (user) {
       const displayName = nickname || user.displayName || 'Player';
@@ -389,31 +406,132 @@ export class UIManager {
     }
   }
 
+  private updateSettingsVisibility() {
+    const graphicsSection = this.settingsMenu.querySelector('#section-graphics');
+    if (this.isLoggedIn) {
+      this.nickRow.classList.remove('hidden');
+      if (graphicsSection) graphicsSection.classList.add('force-border-top');
+    } else {
+      this.nickRow.classList.add('hidden');
+      if (graphicsSection) graphicsSection.classList.remove('force-border-top');
+    }
+  }
+
   private createSettingsMenu(defaultSensitivity: number): HTMLElement {
     const menu = document.createElement('div');
     menu.id = 'settings-menu';
     menu.className = 'menu-overlay hidden';
 
-    menu.innerHTML =
-      '<h1 class="menu-title">Settings</h1>' +
+    menu.innerHTML = `
+      <h1 class="menu-title">Settings</h1>
 
-      '<div class="setting-row hidden" id="row-nickname">' +
-      '<label>Nickname</label>' +
-      '<input type="text" id="nickname-input" placeholder="Enter nickname" maxlength="12">' +
-      '</div>' +
+      <div class="settings-scroll-container">
+        <!-- Nickname -->
+        <div class="setting-row hidden" id="row-nickname">
+          <label>Nickname</label>
+          <input type="text" id="nickname-input" placeholder="Enter nickname" maxlength="12">
+        </div>
 
-      '<div class="setting-row">' +
-      '<label>Sensitivity</label>' +
-      '<input type="range" id="sens" min="0.1" max="10.0" step="0.05" value="' + defaultSensitivity + '">' +
-      '<span id="sens-val">' + defaultSensitivity + '</span>' +
-      '</div>' +
+        <div class="controls-section" id="section-graphics">
+          <div class="controls-title">Graphics</div>
 
-      '<div id="settings-error" class="settings-error hidden"></div>' +
+          <!-- VSync -->
+          <div class="setting-row">
+            <label>VSync</label>
+            <div style="flex-grow: 1; display: flex; justify-content: flex-start;">
+               <div class="toggle-group">
+                 <button id="btn-vsync-on" class="toggle-btn">ON</button>
+                 <button id="btn-vsync-off" class="toggle-btn">OFF</button>
+               </div>
+            </div>
+            <span></span>
+          </div>
 
-      '<div class="settings-actions">' +
-      '<button id="btn-settings-back" class="menu-btn">BACK</button>' +
-      '<button id="btn-settings-apply" class="menu-btn btn-apply">APPLY</button>' +
-      '</div>';
+          <!-- FPS Limit -->
+          <div class="setting-row" id="row-fps">
+            <label>Max FPS</label>
+            <input type="range" id="fps-cap" class="settings-slider" min="30" max="1000" step="10" value="1000">
+            <span id="fps-val">Unlimited</span>
+          </div>
+
+          <!-- Sensitivity -->
+          <div class="setting-row">
+            <label>Sensitivity</label>
+            <input type="range" id="sens" class="settings-slider" min="0.1" max="10.0" step="0.05" value="${defaultSensitivity}">
+            <span id="sens-val">${defaultSensitivity}</span>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-section">
+          <div class="controls-title">Controls</div>
+          
+          <!-- Forward -->
+          <div class="control-row">
+            <span>Move Forward</span>
+            <div class="control-buttons">
+              <button class="bind-btn" data-action="forward" data-index="0">W</button>
+              <button class="bind-btn" data-action="forward" data-index="1">NONE</button>
+            </div>
+          </div>
+
+          <!-- Backward -->
+          <div class="control-row">
+            <span>Move Backward</span>
+            <div class="control-buttons">
+              <button class="bind-btn" data-action="backward" data-index="0">S</button>
+              <button class="bind-btn" data-action="backward" data-index="1">NONE</button>
+            </div>
+          </div>
+
+          <!-- Left -->
+          <div class="control-row">
+            <span>Move Left</span>
+            <div class="control-buttons">
+              <button class="bind-btn" data-action="left" data-index="0">A</button>
+              <button class="bind-btn" data-action="left" data-index="1">NONE</button>
+            </div>
+          </div>
+
+          <!-- Right -->
+          <div class="control-row">
+            <span>Move Right</span>
+            <div class="control-buttons">
+              <button class="bind-btn" data-action="right" data-index="0">D</button>
+              <button class="bind-btn" data-action="right" data-index="1">NONE</button>
+            </div>
+          </div>
+
+           <!-- Reset -->
+          <div class="control-row">
+            <span>Reset</span>
+            <div class="control-buttons">
+              <button class="bind-btn" data-action="reset" data-index="0">R</button>
+              <button class="bind-btn" data-action="reset" data-index="1">NONE</button>
+            </div>
+          </div>
+
+           <!-- Jump -->
+          <div class="control-row">
+            <span>Jump</span>
+            <div class="control-buttons">
+              <button class="bind-btn" data-action="jump" data-index="0">Space</button>
+              <button class="bind-btn" data-action="jump" data-index="1">WheelUp</button>
+              <button class="bind-btn" data-action="jump" data-index="2">WheelDown</button>
+            </div>
+          </div>
+
+          <div id="bind-warning"></div>
+        </div>
+      </div>
+
+      <div id="settings-error" class="settings-error hidden"></div>
+
+      <div class="settings-actions">
+        <button id="btn-settings-back" class="menu-btn">BACK</button>
+        <button id="btn-settings-apply" class="menu-btn btn-apply">APPLY</button>
+      </div>
+    `;
 
     menu.addEventListener('click', (e) => e.stopPropagation());
     menu.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -424,8 +542,17 @@ export class UIManager {
     this.sensInput = menu.querySelector('#sens') as HTMLInputElement;
     this.sensVal = menu.querySelector('#sens-val') as HTMLElement;
 
+    this.vsyncOnBtn = menu.querySelector('#btn-vsync-on') as HTMLElement;
+    this.vsyncOffBtn = menu.querySelector('#btn-vsync-off') as HTMLElement;
+
+    this.fpsInput = menu.querySelector('#fps-cap') as HTMLInputElement;
+    this.fpsVal = menu.querySelector('#fps-val') as HTMLElement;
+
     this.nickRow = menu.querySelector('#row-nickname') as HTMLElement;
     this.nickInput = menu.querySelector('#nickname-input') as HTMLInputElement;
+
+    this.bindButtons = Array.from(menu.querySelectorAll('.bind-btn'));
+    this.bindWarning = menu.querySelector('#bind-warning') as HTMLElement;
 
     const settingsError = menu.querySelector('#settings-error') as HTMLElement;
     this.nickInput.addEventListener('input', () => settingsError.classList.add('hidden'));
@@ -455,9 +582,6 @@ export class UIManager {
     this.visualsBtn.addEventListener('click', () => { });
 
     this.settingsBackBtn.addEventListener('click', () => {
-      this.sensInput.value = this.pendingSensitivity.toString();
-      this.sensVal.textContent = this.pendingSensitivity.toFixed(2);
-      this.nickInput.value = this.pendingNickname;
       this.toggleSettings(false);
     });
 
@@ -465,13 +589,20 @@ export class UIManager {
       const newSens = parseFloat(this.sensInput.value);
       const newNick = this.nickInput.value;
 
+      let newFps = parseInt(this.fpsInput.value, 10);
+      if (this.isVsyncEnabled) newFps = -1;
+
       this.pendingSensitivity = newSens;
       this.pendingNickname = newNick;
+      this.pendingFpsLimit = newFps;
+      this.cleanKeybindings = JSON.parse(JSON.stringify(this.pendingKeybindings));
 
       if (this.onApplySettings) {
         this.onApplySettings({
           sensitivity: newSens,
-          nickname: newNick
+          nickname: newNick,
+          fpsLimit: this.pendingFpsLimit,
+          keybindings: { ...this.pendingKeybindings }
         });
       }
     });
@@ -479,6 +610,207 @@ export class UIManager {
     this.sensInput.addEventListener('input', (e) => {
       const val = parseFloat((e.target as HTMLInputElement).value);
       this.sensVal.textContent = val.toFixed(2);
+    });
+
+    this.vsyncOnBtn.addEventListener('click', () => {
+      this.setVsyncState(true);
+      this.toggleFpsSlider(false);
+    });
+
+    this.vsyncOffBtn.addEventListener('click', () => {
+      this.setVsyncState(false);
+      this.toggleFpsSlider(true);
+    });
+
+    this.fpsInput.addEventListener('input', (e) => {
+      const val = parseInt((e.target as HTMLInputElement).value, 10);
+      this.updateFpsDisplay(val);
+    });
+
+    this.bindButtons.forEach(btn => {
+      btn.addEventListener('click', () => this.startBinding(btn));
+      btn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.clearBinding(btn);
+      });
+    });
+  }
+
+  private setVsyncState(enabled: boolean) {
+    this.isVsyncEnabled = enabled;
+    if (enabled) {
+      this.vsyncOnBtn.classList.add('active');
+      this.vsyncOffBtn.classList.remove('active');
+    } else {
+      this.vsyncOnBtn.classList.remove('active');
+      this.vsyncOffBtn.classList.add('active');
+    }
+  }
+
+  private toggleFpsSlider(enabled: boolean) {
+    this.fpsInput.disabled = !enabled;
+    const row = this.fpsInput.parentElement;
+    if (row) {
+      if (!enabled) {
+        row.style.opacity = '0.5';
+        this.fpsVal.textContent = 'Monitor';
+      } else {
+        row.style.opacity = '1';
+        this.updateFpsDisplay(parseInt(this.fpsInput.value, 10));
+      }
+    }
+  }
+
+  private updateFpsDisplay(val: number) {
+    if (val >= 1000) {
+      this.fpsVal.textContent = 'Unlimited';
+      this.fpsVal.style.fontSize = '0.8em';
+    } else {
+      this.fpsVal.textContent = val.toString();
+      this.fpsVal.style.fontSize = '1em';
+    }
+  }
+
+  private startBinding(btn: HTMLElement) {
+    if (btn.classList.contains('recording')) return;
+
+    this.isBinding = true;
+    const originalText = btn.textContent;
+    btn.textContent = '> PRESS KEY <';
+    btn.classList.add('recording');
+
+    const action = btn.getAttribute('data-action')!;
+    const index = parseInt(btn.getAttribute('data-index')!, 10);
+
+    const cleanup = () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onMouse);
+      window.removeEventListener('wheel', onWheel);
+      btn.classList.remove('recording');
+      this.isBinding = false;
+    };
+
+    this.bindingCleanup = () => {
+      cleanup();
+      btn.textContent = originalText;
+    };
+
+    const finish = (code: string | null) => {
+      if (this.bindingCleanup) {
+        this.bindingCleanup();
+        this.bindingCleanup = null;
+      }
+
+      this.lastBindingTime = performance.now();
+
+      if (code) {
+        if (code === 'Escape') {
+          this.clearBinding(btn);
+        } else {
+          this.setBinding(action, index, code);
+        }
+      } else {
+        btn.textContent = originalText;
+      }
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      finish(e.code);
+    };
+
+    const onMouse = () => {
+      finish(null);
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const code = e.deltaY < 0 ? 'WheelUp' : 'WheelDown';
+      finish(code);
+    };
+
+    setTimeout(() => {
+      window.addEventListener('keydown', onKey);
+      window.addEventListener('mousedown', onMouse);
+      window.addEventListener('wheel', onWheel, { passive: false });
+    }, 50);
+  }
+
+  private setBinding(action: string, index: number, code: string) {
+    if (!this.pendingKeybindings[action]) {
+      this.pendingKeybindings[action] = [];
+    }
+    while (this.pendingKeybindings[action].length <= index) {
+      this.pendingKeybindings[action].push('NONE');
+    }
+
+    this.pendingKeybindings[action][index] = code;
+    this.updateBindButtons(this.pendingKeybindings);
+  }
+
+  private clearBinding(btn: HTMLElement) {
+    const action = btn.getAttribute('data-action')!;
+    const index = parseInt(btn.getAttribute('data-index')!, 10);
+
+    if (this.pendingKeybindings[action] && this.pendingKeybindings[action][index]) {
+      this.pendingKeybindings[action][index] = 'NONE';
+      this.updateBindButtons(this.pendingKeybindings);
+    }
+  }
+
+  private updateBindButtons(bindings: { [action: string]: string[] }) {
+    const keyUsage: Map<string, string[]> = new Map();
+
+    for (const action in bindings) {
+      bindings[action].forEach(key => {
+        if (key && key !== 'NONE') {
+          if (!keyUsage.has(key)) keyUsage.set(key, []);
+          keyUsage.get(key)!.push(action);
+        }
+      });
+    }
+
+    let conflicts: string[] = [];
+    const conflictingKeys = new Set<string>();
+
+    keyUsage.forEach((actions, key) => {
+      if (actions.length > 1) {
+        const uniqueActions = [...new Set(actions)];
+        if (uniqueActions.length > 1) {
+          conflictingKeys.add(key);
+          conflicts.push(`${key.replace('Key', '')} is bound to: ${uniqueActions.join(', ').toUpperCase()}`);
+        }
+      }
+    });
+
+    if (conflicts.length > 0) {
+      this.bindWarning.innerText = conflicts.join('\n');
+    } else {
+      this.bindWarning.textContent = '';
+    }
+
+    this.bindButtons.forEach(btn => {
+      const action = btn.getAttribute('data-action')!;
+      const index = parseInt(btn.getAttribute('data-index')!, 10);
+
+      let code = 'NONE';
+      if (bindings[action] && bindings[action][index]) {
+        code = bindings[action][index];
+      }
+
+      btn.className = 'bind-btn';
+      if (code === 'NONE') btn.classList.add('empty');
+
+      if (code !== 'NONE') {
+        btn.textContent = code.replace('Key', '');
+        if (conflictingKeys.has(code)) {
+          btn.classList.add('conflict');
+        }
+      } else {
+        btn.textContent = 'NONE';
+      }
     });
   }
 
@@ -495,7 +827,12 @@ export class UIManager {
       document.exitPointerLock();
     } else {
       this.mainMenu.classList.add('hidden');
+
+      if (!this.settingsMenu.classList.contains('hidden')) {
+        this.closeSettingsInternal();
+      }
       this.settingsMenu.classList.add('hidden');
+
       this.authModal.classList.add('hidden');
       this.gameOverMenu.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
@@ -506,6 +843,15 @@ export class UIManager {
 
       this.hud.style.display = 'block';
     }
+  }
+
+  private closeSettingsInternal() {
+    if (this.bindingCleanup) {
+      this.bindingCleanup();
+      this.bindingCleanup = null;
+    }
+    this.revertSettings();
+    this.settingsMenu.classList.add('hidden');
   }
 
   public toggleAuthModal(isOpen: boolean) {
@@ -551,31 +897,70 @@ export class UIManager {
     }
   }
 
+  public revertSettings() {
+    this.sensInput.value = this.pendingSensitivity.toString();
+    this.sensVal.textContent = this.pendingSensitivity.toFixed(2);
+
+    this.fpsInput.value = (this.pendingFpsLimit === -1 ? 1000 : this.pendingFpsLimit).toString();
+    this.updateFpsDisplay(this.pendingFpsLimit === -1 ? 1000 : this.pendingFpsLimit);
+
+    this.setVsyncState(this.pendingFpsLimit === -1);
+    this.toggleFpsSlider(!this.isVsyncEnabled);
+
+    this.nickInput.value = this.pendingNickname;
+
+    this.pendingKeybindings = JSON.parse(JSON.stringify(this.cleanKeybindings));
+    this.updateBindButtons(this.pendingKeybindings);
+  }
+
+  public handleEscape(): boolean {
+    if (this.isBinding) return false;
+
+    if (!this.authModal.classList.contains('hidden')) {
+      this.toggleAuthModal(false);
+      return false;
+    }
+
+    if (!this.settingsMenu.classList.contains('hidden')) {
+      this.toggleSettings(false);
+      return false;
+    }
+
+    if (!this.leaderboardMenu.classList.contains('hidden')) {
+      this.leaderboardMenu.classList.add('hidden');
+      this.mainMenu.classList.remove('hidden');
+      return false;
+    }
+
+    return true;
+  }
+
   public toggleSettings(isOpen: boolean) {
     if (isOpen) {
-      if (this.isLoggedIn) {
-        this.nickRow.classList.remove('hidden');
-      } else {
-        this.nickRow.classList.add('hidden');
-      }
+      this.updateSettingsVisibility();
 
       this.mainMenu.classList.add('hidden');
       this.gameOverMenu.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
       this.settingsMenu.classList.remove('hidden');
     } else {
+      this.closeSettingsInternal();
       this.mainMenu.classList.remove('hidden');
-      this.settingsMenu.classList.add('hidden');
     }
   }
 
-  public syncSettings(settings: { sensitivity: number, nickname: string }) {
+  public syncSettings(settings: { sensitivity: number, nickname: string, fpsLimit?: number, keybindings?: { [action: string]: string[] } }) {
     this.pendingSensitivity = settings.sensitivity;
     this.pendingNickname = settings.nickname;
+    this.pendingFpsLimit = settings.fpsLimit ?? -1;
 
-    this.sensInput.value = settings.sensitivity.toString();
-    this.sensVal.textContent = settings.sensitivity.toFixed(2);
-    this.nickInput.value = settings.nickname;
+    if (settings.keybindings) {
+      this.cleanKeybindings = JSON.parse(JSON.stringify(settings.keybindings));
+    } else {
+      this.cleanKeybindings = {};
+    }
+
+    this.revertSettings();
   }
 
   public update(fps: number, speed: number, distance: number) {

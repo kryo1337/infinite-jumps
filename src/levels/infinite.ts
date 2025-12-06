@@ -31,12 +31,12 @@ export class InfiniteLevel extends BaseLevel {
   };
 
   private readonly blockTypes: BlockType[] = [
-    { type: 'box', probability: 0.65, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [3, 1, 3] },
+    { type: 'box', probability: 0.7, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [3, 1, 3] },
     { type: 'teleport', probability: 0.05, color: InfiniteLevel.CONFIG.TELEPORT_COLOR, size: [15, 1, 3] },
     { type: 'damage', probability: 0.05, color: InfiniteLevel.CONFIG.DAMAGE_COLOR, size: [3, 1, 3] },
     { type: 'cross', probability: 0.05, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [6, 6, 0.5], length: 6, extraParams: { armWidth: 1 } },
     { type: 'ramp', probability: 0.15, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [4, 5, 12], spacingMult: 1.5 },
-    { type: 'down_ramp', probability: 0.05, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [9, 22, 27], length: 60, spacingMult: -1, extraParams: { modelPath: '/models/rampdown.glb' } }
+    // { type: 'down_ramp', probability: 0.00, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [9, 22, 27], length: 60, spacingMult: -1, extraParams: { modelPath: '/models/rampdown.glb' } }
   ];
 
   public load() {

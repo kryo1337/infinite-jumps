@@ -118,10 +118,15 @@ ui.onLogoutRequest = () => {
 ui.onApplySettings = async (settings) => {
   try {
     player.setSensitivity(settings.sensitivity);
+    if (settings.keybindings) {
+      player.setKeybindings(settings.keybindings);
+    }
 
     const settingsToSave = {
       sensitivity: settings.sensitivity,
-      nickname: (settings.nickname || '').trim() || 'Player'
+      nickname: (settings.nickname || '').trim() || 'Player',
+      fpsLimit: settings.fpsLimit,
+      keybindings: settings.keybindings
     };
 
     await authManager.saveSettings(settingsToSave);
@@ -142,6 +147,9 @@ authManager.onAuthStateChanged = (user) => {
 
 authManager.onSettingsLoaded = (settings) => {
   player.setSensitivity(settings.sensitivity);
+  if (settings.keybindings) {
+    player.setKeybindings(settings.keybindings);
+  }
   ui.syncSettings(settings);
   ui.updateUserHeader(authManager.currentUser, settings.nickname);
 };
@@ -201,15 +209,24 @@ function setupEventListeners() {
   });
 
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyR') {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+    if (ui.isBinding) return;
+
+    const bindings = authManager.settings.keybindings;
+    if (bindings && bindings.reset && bindings.reset.includes(e.code)) {
       performRestart();
     }
   });
 
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Escape' && isPaused && !isGameOver) {
-      if (performance.now() - lastStateChangeTime > 100) {
-        document.body.requestPointerLock();
+      if (performance.now() - ui.lastBindingTime < 200) return;
+
+      if (ui.handleEscape()) {
+        if (performance.now() - lastStateChangeTime > 100) {
+          document.body.requestPointerLock();
+        }
       }
     }
   });
@@ -224,18 +241,30 @@ function setupEventListeners() {
 setupEventListeners();
 
 // --- LOOP ---
-const clock = new THREE.Clock();
 let frameCount = 0;
 let lastTime = 0;
 let fps = 0;
 
 const PHYSICS_STEP = CONFIG.physicsStep;
 let accumulator = 0;
+let loopLastTime = performance.now();
 
 function gameLoop() {
-  requestAnimationFrame(gameLoop);
+  const settings = authManager.settings;
+  const fpsLimit = settings ? (settings.fpsLimit === undefined ? -1 : settings.fpsLimit) : -1;
 
-  const dt = Math.min(clock.getDelta(), 0.1);
+  if (fpsLimit === -1) {
+    requestAnimationFrame(gameLoop);
+  } else {
+    const safeFps = Math.max(30, fpsLimit);
+    const delay = safeFps >= 1000 ? 0 : (1000 / safeFps);
+    setTimeout(gameLoop, delay);
+  }
+
+  const now = performance.now();
+
+  const dt = Math.min((now - loopLastTime) / 1000, 0.1);
+  loopLastTime = now;
 
   if (!isPaused && !isGameOver) {
     accumulator += dt;
@@ -284,7 +313,6 @@ function gameLoop() {
   }
 
   frameCount++;
-  const now = performance.now();
   if (now - lastTime >= 1000) {
     fps = frameCount;
     frameCount = 0;
