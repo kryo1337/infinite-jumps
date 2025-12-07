@@ -6,17 +6,7 @@ import { LevelLoader } from './level_loader';
 import { UIManager } from './ui_manager';
 import { AuthManager } from './auth_manager';
 import { GameLoader } from './utils/game_loader';
-
-// --- CONFIG ---
-const CONFIG = {
-  initialLevel: 'infinite' as 'infinite',
-  fov: 90,
-  defaultSensitivity: 1.0,
-  gravity: { x: 0.0, y: -16.0, z: 0.0 },
-  deathThreshold: -10.0,
-  skyboxPath: '/textures/skybox/DayInTheClouds4k.hdr',
-  physicsStep: 1 / 60
-};
+import { GAME_CONFIG } from './config';
 
 // --- GLOBAL VARIABLES ---
 let player: PlayerController;
@@ -30,7 +20,7 @@ let listenersAttached = false;
 // --- SCENE SETUP ---
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(GAME_CONFIG.World.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.rotation.y = Math.PI;
 
 const renderer = new THREE.WebGLRenderer({
@@ -51,10 +41,10 @@ scene.add(dirLight);
 
 // --- PHYSICS INIT ---
 await RAPIER.init();
-const world = new RAPIER.World(CONFIG.gravity);
+const world = new RAPIER.World(GAME_CONFIG.World.gravity);
 
 // --- UI INIT ---
-const ui = new UIManager(CONFIG.defaultSensitivity);
+const ui = new UIManager(GAME_CONFIG.World.defaultSensitivity);
 
 // --- GAME LOADER ---
 const gameLoader = new GameLoader(scene);
@@ -78,11 +68,11 @@ gameLoader.load(
 function initGame() {
   // --- WORLD GEN ---
   levelLoader = new LevelLoader(scene, world);
-  levelLoader.loadLevel(CONFIG.initialLevel);
+  levelLoader.loadLevel(GAME_CONFIG.World.initialLevel);
 
   // --- PLAYER ---
   player = new PlayerController(camera, document.body, world, {
-    mouseSensitivity: CONFIG.defaultSensitivity,
+    mouseSensitivity: GAME_CONFIG.World.defaultSensitivity,
   });
 
   // --- AUTH ---
@@ -250,7 +240,7 @@ let frameCount = 0;
 let lastTime = 0;
 let fps = 0;
 
-const PHYSICS_STEP = CONFIG.physicsStep;
+const PHYSICS_STEP = GAME_CONFIG.World.physicsStep;
 let accumulator = 0;
 let loopLastTime = performance.now();
 
@@ -281,7 +271,7 @@ function gameLoop() {
       levelLoader.update(player.body.translation().z, player.getSpeed(), player.body.translation().y);
 
       const isDeadlyCollision = player.groundColliderHandle !== undefined && levelLoader.checkDeathCollision(player.groundColliderHandle);
-      const isFallen = player.body.translation().y < (levelLoader.getMinY() + CONFIG.deathThreshold);
+      const isFallen = player.body.translation().y < (levelLoader.getMinY() + GAME_CONFIG.World.deathThreshold);
 
       if (player.groundColliderHandle !== undefined) {
         const teleportOffset = levelLoader.getTeleportOffset(player.groundColliderHandle);

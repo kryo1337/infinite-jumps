@@ -1,16 +1,7 @@
 import * as THREE from 'three';
 import { BaseLevel } from './base_level';
 import { Chunk } from './chunk';
-
-interface BlockType {
-  type: 'box' | 'ramp' | 'down_ramp' | 'cross' | 'damage' | 'teleport';
-  probability: number;
-  color: number;
-  size?: [number, number, number];
-  length?: number;
-  extraParams?: any;
-  spacingMult?: number;
-}
+import { GAME_CONFIG, type BlockType } from '../config';
 
 export class InfiniteLevel extends BaseLevel {
   private lastBlockEndZ: number = 5;
@@ -19,25 +10,6 @@ export class InfiniteLevel extends BaseLevel {
   private currentY: number = 0;
   private minChunkYThreshold: number = -Infinity;
   private nextLogicalId: number = 0;
-
-  private static readonly CONFIG = {
-    SPACING_BASE: 5.0,
-    SPACING_SPEED_FACTOR: 5.0,
-    X_SPREAD: 10.0,
-    Y_OFFSET: 0,
-    DAMAGE_COLOR: 0xff0000,
-    THEME_COLOR: 0xe0b0ff,
-    TELEPORT_COLOR: 0xffff00
-  };
-
-  private readonly blockTypes: BlockType[] = [
-    { type: 'box', probability: 0.7, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [3, 1, 3] },
-    { type: 'teleport', probability: 0.05, color: InfiniteLevel.CONFIG.TELEPORT_COLOR, size: [15, 1, 3] },
-    { type: 'damage', probability: 0.05, color: InfiniteLevel.CONFIG.DAMAGE_COLOR, size: [3, 1, 3] },
-    { type: 'cross', probability: 0.05, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [6, 6, 0.5], length: 6, extraParams: { armWidth: 1 } },
-    { type: 'ramp', probability: 0.15, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [4, 5, 12], spacingMult: 1.5 },
-    // { type: 'down_ramp', probability: 0.00, color: InfiniteLevel.CONFIG.THEME_COLOR, size: [9, 22, 27], length: 60, spacingMult: -1, extraParams: { modelPath: '/models/rampdown.glb' } }
-  ];
 
   public load() {
     this.chunkManager.preloadModel('/models/rampdown.glb');
@@ -94,10 +66,10 @@ export class InfiniteLevel extends BaseLevel {
       let typeData: BlockType;
 
       if (this.isFirstGen) {
-        typeData = this.blockTypes[0];
+        typeData = GAME_CONFIG.Level.BLOCK_TYPES[0];
         this.isFirstGen = false;
       } else if (this.lastBlockType !== 'box') {
-        typeData = this.blockTypes[0];
+        typeData = GAME_CONFIG.Level.BLOCK_TYPES[0];
       } else {
         typeData = this.pickBlockType();
       }
@@ -107,12 +79,12 @@ export class InfiniteLevel extends BaseLevel {
       const size = typeData.size || [3, 1, 3];
       const length = typeData.length ?? size[2];
 
-      const gap = (InfiniteLevel.CONFIG.SPACING_BASE * (typeData.spacingMult || 1.0)) + (playerSpeed / InfiniteLevel.CONFIG.SPACING_SPEED_FACTOR);
+      const gap = (GAME_CONFIG.Level.SPACING_BASE * (typeData.spacingMult || 1.0)) + (playerSpeed / GAME_CONFIG.Level.SPACING_SPEED_FACTOR);
 
       const spawnZ = this.lastBlockEndZ + gap + (size[2] / 2);
 
-      const x = (Math.random() - 0.5) * InfiniteLevel.CONFIG.X_SPREAD;
-      const y = this.currentY + InfiniteLevel.CONFIG.Y_OFFSET;
+      const x = (Math.random() - 0.5) * GAME_CONFIG.Level.X_SPREAD;
+      const y = this.currentY + GAME_CONFIG.Level.Y_OFFSET;
 
       const currentLogicalId = this.nextLogicalId++;
 
@@ -140,8 +112,8 @@ export class InfiniteLevel extends BaseLevel {
         this.currentY -= (dropHeight - 8);
 
       } else if (typeData.type === 'damage') {
-        const safeColor = InfiniteLevel.CONFIG.THEME_COLOR;
-        const damageColor = InfiniteLevel.CONFIG.DAMAGE_COLOR;
+        const safeColor = GAME_CONFIG.Level.COLORS.THEME;
+        const damageColor = GAME_CONFIG.Level.COLORS.DAMAGE;
         const offset = 3 + (Math.random() * 4);
         const isLeftSafe = Math.random() > 0.5;
 
@@ -160,7 +132,7 @@ export class InfiniteLevel extends BaseLevel {
         sourceChunk.teleportOffset = new THREE.Vector3(0, teleportHeight, 0);
 
         // Teleport Destination
-        this.spawnChunk('box', size, { x: x, y: y + teleportHeight, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, InfiniteLevel.CONFIG.THEME_COLOR, currentLogicalId);
+        this.spawnChunk('box', size, { x: x, y: y + teleportHeight, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, GAME_CONFIG.Level.COLORS.THEME, currentLogicalId);
         this.currentY += teleportHeight;
 
       } else {
@@ -190,13 +162,13 @@ export class InfiniteLevel extends BaseLevel {
     const randomValue = Math.random();
     let cumulativeProbability = 0;
 
-    for (const block of this.blockTypes) {
+    for (const block of GAME_CONFIG.Level.BLOCK_TYPES) {
       cumulativeProbability += block.probability;
       if (randomValue <= cumulativeProbability) {
         return block;
       }
     }
 
-    return this.blockTypes[0];
+    return GAME_CONFIG.Level.BLOCK_TYPES[0];
   }
 }

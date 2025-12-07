@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { GAME_CONFIG } from './config';
 
 export interface PlayerConfig {
   groundAcceleration: number;
@@ -21,19 +22,6 @@ interface PlayerInput {
 
 export class PlayerController {
   static readonly SPAWN_POSITION = { x: 0, y: 3, z: 0 };
-
-  static readonly GROUND_ACCELERATION = 14.0;
-  static readonly AIR_ACCELERATION = 300.0;
-  static readonly GROUND_SPEED_LIMIT = 10.0;
-  static readonly AIR_SPEED_LIMIT = 1.5;
-  static readonly FRICTION = 6.0;
-  static readonly JUMP_IMPULSE = 6.0;
-  static readonly EYE_HEIGHT = 0.8;
-  static readonly GROUND_CHECK_DISTANCE = 1.55;
-  static readonly SURF_MAX_ANGLE = Math.PI / 4;
-  static readonly SURF_STICK_FORCE = 40.0;
-
-  static readonly SENSITIVITY_SCALE = 0.0005;
   static readonly COLLISION_MASK_ALL = 0xffffffff;
 
   static readonly ACTIONS = {
@@ -89,12 +77,12 @@ export class PlayerController {
     this.world = world;
 
     this.config = {
-      groundAcceleration: options.groundAcceleration ?? PlayerController.GROUND_ACCELERATION,
-      airAcceleration: options.airAcceleration ?? PlayerController.AIR_ACCELERATION,
-      groundLimit: options.groundLimit ?? PlayerController.GROUND_SPEED_LIMIT,
-      airLimit: options.airLimit ?? PlayerController.AIR_SPEED_LIMIT,
-      friction: options.friction ?? PlayerController.FRICTION,
-      jumpImpulse: options.jumpImpulse ?? PlayerController.JUMP_IMPULSE,
+      groundAcceleration: options.groundAcceleration ?? GAME_CONFIG.Player.GROUND_ACCELERATION,
+      airAcceleration: options.airAcceleration ?? GAME_CONFIG.Player.AIR_ACCELERATION,
+      groundLimit: options.groundLimit ?? GAME_CONFIG.Player.GROUND_SPEED_LIMIT,
+      airLimit: options.airLimit ?? GAME_CONFIG.Player.AIR_SPEED_LIMIT,
+      friction: options.friction ?? GAME_CONFIG.Player.FRICTION,
+      jumpImpulse: options.jumpImpulse ?? GAME_CONFIG.Player.JUMP_IMPULSE,
       mouseSensitivity: options.mouseSensitivity ?? 1.0,
       autoJump: options.autoJump ?? true,
     };
@@ -176,7 +164,7 @@ export class PlayerController {
     document.addEventListener('mousemove', (e: MouseEvent) => {
       if (document.pointerLockElement !== this.domElement) return;
 
-      const scale = this.config.mouseSensitivity * PlayerController.SENSITIVITY_SCALE;
+      const scale = this.config.mouseSensitivity * GAME_CONFIG.Player.SENSITIVITY_SCALE;
       this.yaw -= e.movementX * scale;
       this.pitch -= e.movementY * scale;
       this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
@@ -220,7 +208,7 @@ export class PlayerController {
 
       const currentTotalSpeed = this._tempVec2.set(vel.x, vel.y, vel.z).length();
       if (currentTotalSpeed > 1.0) {
-        const stickForceVec = this._tempVec.copy(this.surfNormal).multiplyScalar(-PlayerController.SURF_STICK_FORCE * dt);
+        const stickForceVec = this._tempVec.copy(this.surfNormal).multiplyScalar(-GAME_CONFIG.Player.SURF_STICK_FORCE * dt);
         vel.x += stickForceVec.x;
         vel.y += stickForceVec.y;
         vel.z += stickForceVec.z;
@@ -256,7 +244,7 @@ export class PlayerController {
 
     this.camera.position.set(
       this.smoothedPosition.x,
-      this.smoothedPosition.y + PlayerController.EYE_HEIGHT,
+      this.smoothedPosition.y + GAME_CONFIG.Player.EYE_HEIGHT,
       this.smoothedPosition.z
     );
   }
@@ -319,7 +307,7 @@ export class PlayerController {
 
     const rayHit = this.world.castRayAndGetNormal(
       this._ray,
-      PlayerController.GROUND_CHECK_DISTANCE,
+      GAME_CONFIG.Player.GROUND_CHECK_DISTANCE,
       true,
       undefined,
       undefined,
@@ -331,7 +319,7 @@ export class PlayerController {
       const n = rayHit.normal;
       const slopeAngle = Math.acos(THREE.MathUtils.clamp(n.y, -1, 1));
 
-      if (slopeAngle < PlayerController.SURF_MAX_ANGLE) {
+      if (slopeAngle < GAME_CONFIG.Player.SURF_MAX_ANGLE) {
         this.isGrounded = true;
         this.groundColliderHandle = rayHit.collider.handle;
         return;
@@ -361,7 +349,7 @@ export class PlayerController {
 
       const slopeAngle = Math.acos(THREE.MathUtils.clamp(n.y, -1, 1));
 
-      if (slopeAngle >= PlayerController.SURF_MAX_ANGLE && slopeAngle < Math.PI / 2 + 0.1) {
+      if (slopeAngle >= GAME_CONFIG.Player.SURF_MAX_ANGLE && slopeAngle < Math.PI / 2 + 0.1) {
         this.isSurfing = true;
         this.surfNormal.set(n.x, n.y, n.z);
       }
