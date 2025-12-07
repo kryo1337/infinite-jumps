@@ -40,6 +40,10 @@ export class ModelLoader {
     });
   }
 
+  public static add(path: string, model: THREE.Group) {
+    this.cache.set(path, model);
+  }
+
   public static get(path: string): THREE.Group | undefined {
     const model = this.cache.get(path);
     return model ? model.clone() : undefined;

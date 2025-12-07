@@ -4,7 +4,7 @@ export class UIManager {
   private hud: HTMLElement;
   private hudFps!: HTMLElement;
   private hudSpeed!: HTMLElement;
-  private hudDistance!: HTMLElement;
+  private hudScore!: HTMLElement;
   private nickInput!: HTMLInputElement;
   private nickRow!: HTMLElement;
 
@@ -66,20 +66,39 @@ export class UIManager {
   private bindButtons: HTMLElement[] = [];
   private bindWarning!: HTMLElement;
 
+  private loadingScreen!: HTMLElement;
+  private loadingBar!: HTMLElement;
+  private loadingDetails!: HTMLElement;
+
   private isVsyncEnabled: boolean = false;
 
   constructor(defaultSensitivity: number) {
     this.pendingSensitivity = defaultSensitivity;
 
+    // --- LOADING SCREEN ---
+    this.loadingScreen = document.createElement('div');
+    this.loadingScreen.id = 'loading-screen';
+    this.loadingScreen.innerHTML = `
+      <div class="loading-title">INFINITE JUMPS</div>
+      <div id="loading-status" class="loading-status">Initializing...</div>
+      <div class="loading-bar-container">
+        <div id="loading-bar-fill" class="loading-bar-fill"></div>
+      </div>
+      <div id="hw-warning" class="hw-warning hidden">⚠ Turn on hardware acceleration for better experience</div>
+    `;
+    document.body.appendChild(this.loadingScreen);
+    this.loadingBar = this.loadingScreen.querySelector('#loading-bar-fill') as HTMLElement;
+    this.loadingDetails = this.loadingScreen.querySelector('#loading-status') as HTMLElement;
+
     // --- HUD ---
     this.hud = document.createElement('div');
     this.hud.className = 'hud';
-    this.hud.innerHTML = 'FPS: <span id="hud-fps">0</span><br>Speed: <span id="hud-speed">0.00</span> u/s<br>Dist: <span id="hud-dist">0.00</span>m';
+    this.hud.innerHTML = 'FPS: <span id="hud-fps">0</span><br>Speed: <span id="hud-speed">0.00</span> u/s<br>Score: <span id="hud-score">0.00</span>';
     document.body.appendChild(this.hud);
 
     this.hudFps = this.hud.querySelector('#hud-fps') as HTMLElement;
     this.hudSpeed = this.hud.querySelector('#hud-speed') as HTMLElement;
-    this.hudDistance = this.hud.querySelector('#hud-dist') as HTMLElement;
+    this.hudScore = this.hud.querySelector('#hud-score') as HTMLElement;
 
     // --- USER HEADER ---
     this.userHeader = document.createElement('div');
@@ -160,7 +179,7 @@ export class UIManager {
     content.innerHTML =
       '<h1 class="menu-title">Infinite Jumps</h1>' +
       '<div id="offline-indicator" class="offline-indicator hidden">ONLINE SERVICES UNAVAILABLE</div>' +
-      '<button id="btn-return" class="menu-btn">Return</button>' +
+      '<button id="btn-return" class="menu-btn">Resume</button>' +
       '<button id="btn-leaderboard" class="menu-btn">Leaderboard</button>' +
       '<button id="btn-settings" class="menu-btn">Settings</button>' +
       '<button id="btn-visuals" class="menu-btn">Visuals</button>';
@@ -976,6 +995,26 @@ export class UIManager {
       this.lastColor = color;
     }
 
-    this.hudDistance.textContent = distance.toFixed(2);
+    this.hudScore.textContent = distance.toFixed(2);
+  }
+
+  public updateLoading(item: string, percent: number) {
+    this.loadingBar.style.width = `${percent}%`;
+    this.loadingDetails.textContent = `Loading: ${item}`;
+  }
+
+  public showHardwareWarning() {
+    const warning = this.loadingScreen.querySelector('#hw-warning');
+    if (warning) {
+      warning.classList.remove('hidden');
+    }
+  }
+
+  public hideLoadingScreen() {
+    this.loadingScreen.classList.add('fade-out');
+    setTimeout(() => {
+      this.loadingScreen.classList.add('hidden');
+      this.loadingScreen.style.pointerEvents = 'none';
+    }, 100);
   }
 }
