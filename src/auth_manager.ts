@@ -13,6 +13,7 @@ import {
   doc,
   setDoc,
   getDoc,
+  updateDoc,
   collection,
   query,
   where,
@@ -22,6 +23,7 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
+import { GAME_STATE, MODE_SETTINGS, DIFFICULTY_SETTINGS } from './config';
 
 const FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -198,11 +200,20 @@ export class AuthManager {
         const userRef = doc(this.db, 'users', this._currentUser.uid);
         await setDoc(userRef, settings, { merge: true });
 
-        const scoreRef = doc(this.db, 'leaderboard', this._currentUser.uid);
-        const scoreSnap = await getDoc(scoreRef);
-        if (scoreSnap.exists()) {
-          await setDoc(scoreRef, { nickname: settings.nickname }, { merge: true });
+        const updatePromises: Promise<void>[] = [];
+        for (const mode of Object.keys(MODE_SETTINGS)) {
+          for (const diff of Object.keys(DIFFICULTY_SETTINGS)) {
+            const collectionPath = `leaderboards/${mode}_${diff}/scores`;
+            const scoreRef = doc(this.db, collectionPath, this._currentUser.uid);
+            updatePromises.push(
+              updateDoc(scoreRef, { nickname: settings.nickname })
+                .catch(() => {
+                  // document doesn't exist
+                })
+            );
+          }
         }
+        await Promise.all(updatePromises);
 
       } catch (error) {
         console.error('Error saving settings to Firestore:', error);
@@ -215,16 +226,18 @@ export class AuthManager {
 
   public async saveScore(score: number): Promise<ScoreResult> {
     if (!this._currentUser || !this.db) {
-      const localHigh = parseInt(localStorage.getItem('local_highscore') || '0', 10);
+      const storageKey = `local_highscore_${GAME_STATE.currentMode}_${GAME_STATE.currentDifficulty}`;
+      const localHigh = parseInt(localStorage.getItem(storageKey) || '0', 10);
       if (score > localHigh) {
-        localStorage.setItem('local_highscore', score.toString());
+        localStorage.setItem(storageKey, score.toString());
         return { isNewHighScore: true, currentHighScore: score };
       }
       return { isNewHighScore: false, currentHighScore: localHigh };
     }
 
     const uid = this._currentUser.uid;
-    const scoreRef = doc(this.db, 'leaderboard', uid);
+    const collectionPath = `leaderboards/${GAME_STATE.currentMode}_${GAME_STATE.currentDifficulty}/scores`;
+    const scoreRef = doc(this.db, collectionPath, uid);
 
     try {
       return await runTransaction(this.db, async (transaction) => {
@@ -253,12 +266,14 @@ export class AuthManager {
     }
   }
 
-  public async getLeaderboard(limitCount: number = 10): Promise<LeaderboardEntry[]> {
-    if (!this.db) return [];
+  public async getLeaderboard(mode: string, difficulty: string, limitCount: number = 10): Promise<{ mode: string, difficulty: string, entries: LeaderboardEntry[] }> {
+    if (!this.db) return { mode, difficulty, entries: [] };
+
+    const collectionPath = `leaderboards/${mode}_${difficulty}/scores`;
 
     try {
       const q = query(
-        collection(this.db, 'leaderboard'),
+        collection(this.db, collectionPath),
         orderBy('score', 'desc'),
         limit(limitCount)
       );
@@ -277,20 +292,23 @@ export class AuthManager {
         });
       });
 
-      return leaderboard;
+      return { mode, difficulty, entries: leaderboard };
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
-      return [];
+      return { mode, difficulty, entries: [] };
     }
   }
 
   public async getUserHighScore(): Promise<number> {
     if (!this._currentUser || !this.db) {
-      return parseInt(localStorage.getItem('local_highscore') || '0', 10);
+      const storageKey = `local_highscore_${GAME_STATE.currentMode}_${GAME_STATE.currentDifficulty}`;
+      return parseInt(localStorage.getItem(storageKey) || '0', 10);
     }
 
+    const collectionPath = `leaderboards/${GAME_STATE.currentMode}_${GAME_STATE.currentDifficulty}/scores`;
+
     try {
-      const scoreRef = doc(this.db, 'leaderboard', this._currentUser.uid);
+      const scoreRef = doc(this.db, collectionPath, this._currentUser.uid);
       const docSnap = await getDoc(scoreRef);
       if (docSnap.exists()) {
         return docSnap.data().score || 0;

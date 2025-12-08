@@ -143,10 +143,10 @@ function initGame() {
 
   ui.onPlayAgain = performRestart;
 
-  ui.leaderboardBtn.addEventListener('click', async () => {
-    const entries = await authManager.getLeaderboard();
-    ui.updateLeaderboard(entries);
-  });
+  ui.onShowLeaderboard = async (mode, difficulty, requestId) => {
+    const result = await authManager.getLeaderboard(mode, difficulty);
+    ui.updateLeaderboard(result.entries, result.mode, result.difficulty, requestId);
+  };
 
   setupEventListeners();
 
@@ -182,7 +182,11 @@ function setupEventListeners() {
   listenersAttached = true;
 
   ui.onResume = () => {
-    document.body.requestPointerLock();
+    if (ui.checkModeChanged()) {
+      performRestart();
+    } else {
+      document.body.requestPointerLock();
+    }
   };
 
   document.addEventListener('click', () => {
@@ -197,6 +201,11 @@ function setupEventListeners() {
       isPaused = false;
       ui.toggleMenu(false);
       if (!isGameOver) ui.toggleGameOver(false);
+
+      if (ui.checkModeChanged()) {
+        performRestart();
+      }
+
     } else {
       if (!isGameOver) {
         isPaused = true;
@@ -293,8 +302,14 @@ function gameLoop() {
           document.exitPointerLock();
 
           const score = Math.max(0, player.body.translation().z);
+
+          ui.showGameOver(score);
+
           authManager.saveScore(score).then((result) => {
-            ui.showGameOver(score, result.currentHighScore, result.isNewHighScore, !!authManager.currentUser);
+            ui.updateGameOverHighscore(result.currentHighScore, result.isNewHighScore, !!authManager.currentUser);
+          }).catch((error) => {
+            console.error("Failed to save score:", error);
+            ui.updateGameOverHighscore(score, false, !!authManager.currentUser);
           });
         }
       } accumulator -= PHYSICS_STEP;

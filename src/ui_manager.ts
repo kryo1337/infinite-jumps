@@ -1,4 +1,5 @@
 import type { User } from 'firebase/auth';
+import { GAME_STATE } from './config';
 
 export class UIManager {
   private hud: HTMLElement;
@@ -10,11 +11,13 @@ export class UIManager {
 
   public mainMenu!: HTMLElement;
   public settingsMenu!: HTMLElement;
+  public gameModeMenu!: HTMLElement;
   public authModal!: HTMLElement;
   public gameOverMenu!: HTMLElement;
   public leaderboardMenu!: HTMLElement;
 
   public returnBtn!: HTMLElement;
+  public gamemodeBtn!: HTMLElement;
   public settingsBtn!: HTMLElement;
   public leaderboardBtn!: HTMLElement;
   public visualsBtn!: HTMLElement;
@@ -22,11 +25,19 @@ export class UIManager {
   public settingsBackBtn!: HTMLElement;
   public settingsApplyBtn!: HTMLElement;
 
+  private gamemodeBackBtn!: HTMLElement;
+  private gamemodeApplyBtn!: HTMLElement;
+  private currentMode: string = 'bhop_surf';
+  private currentDifficulty: string = 'normal';
+
+  private pendingMode: string = 'bhop_surf';
+  private pendingDifficulty: string = 'normal';
+
   private lbList!: HTMLElement;
   private lbBackBtn!: HTMLElement;
 
   public onPlayAgain: (() => void) | null = null;
-  public onShowLeaderboard: (() => void) | null = null;
+  public onShowLeaderboard: ((mode: string, difficulty: string, requestId: number) => void) | null = null;
 
   public userHeader!: HTMLElement;
   private userDropdown!: HTMLElement;
@@ -53,7 +64,11 @@ export class UIManager {
   private bindingCleanup: (() => void) | null = null;
   public isBinding: boolean = false;
 
+  private viewedMode: string = GAME_STATE.currentMode;
+  private viewedDifficulty: string = GAME_STATE.currentDifficulty;
+
   private isLoggedIn: boolean = false;
+  private isAuthModalOpen: boolean = false;
   private previousMenu: HTMLElement | null = null;
 
   public lastBindingTime: number = 0;
@@ -72,8 +87,15 @@ export class UIManager {
 
   private isVsyncEnabled: boolean = false;
 
+  private hasModeChanged: boolean = false;
+
   constructor(defaultSensitivity: number) {
     this.pendingSensitivity = defaultSensitivity;
+
+    this.currentMode = GAME_STATE.currentMode;
+    this.currentDifficulty = GAME_STATE.currentDifficulty;
+    this.pendingMode = this.currentMode;
+    this.pendingDifficulty = this.currentDifficulty;
 
     // --- LOADING SCREEN ---
     this.loadingScreen = document.createElement('div');
@@ -122,12 +144,14 @@ export class UIManager {
     // --- MENUS ---
     this.mainMenu = this.createMainMenu();
     this.settingsMenu = this.createSettingsMenu(defaultSensitivity);
+    this.gameModeMenu = this.createGameModeMenu();
     this.authModal = this.createAuthModal();
     this.gameOverMenu = this.createGameOverMenu();
     this.leaderboardMenu = this.createLeaderboardMenu();
 
     document.body.appendChild(this.mainMenu);
     document.body.appendChild(this.settingsMenu);
+    document.body.appendChild(this.gameModeMenu);
     document.body.appendChild(this.authModal);
     document.body.appendChild(this.gameOverMenu);
     document.body.appendChild(this.leaderboardMenu);
@@ -180,6 +204,7 @@ export class UIManager {
       '<h1 class="menu-title">Infinite Jumps</h1>' +
       '<div id="offline-indicator" class="offline-indicator hidden">ONLINE SERVICES UNAVAILABLE</div>' +
       '<button id="btn-return" class="menu-btn">Resume</button>' +
+      '<button id="btn-gamemode" class="menu-btn">Change Game Mode</button>' +
       '<button id="btn-leaderboard" class="menu-btn">Leaderboard</button>' +
       '<button id="btn-settings" class="menu-btn">Settings</button>' +
       '<button id="btn-visuals" class="menu-btn">Visuals</button>';
@@ -189,11 +214,125 @@ export class UIManager {
     menu.addEventListener('mousedown', (e) => e.stopPropagation());
 
     this.returnBtn = menu.querySelector('#btn-return') as HTMLElement;
+    this.gamemodeBtn = menu.querySelector('#btn-gamemode') as HTMLElement;
     this.leaderboardBtn = menu.querySelector('#btn-leaderboard') as HTMLElement;
     this.settingsBtn = menu.querySelector('#btn-settings') as HTMLElement;
     this.visualsBtn = menu.querySelector('#btn-visuals') as HTMLElement;
 
     return menu;
+  }
+
+  private createGameModeMenu(): HTMLElement {
+    const menu = document.createElement('div');
+    menu.id = 'gamemode-menu';
+    menu.className = 'menu-overlay hidden';
+
+    menu.innerHTML = `
+      <h1 class="menu-title">Game Modes</h1>
+      <div class="settings-scroll-container">
+        
+        <div class="mode-section">
+          <div class="mode-header">Only Bhop</div>
+          <div class="mode-toggle-group">
+            <button class="toggle-btn" data-mode="only_bhop" data-diff="easy">Easy</button>
+            <button class="toggle-btn" data-mode="only_bhop" data-diff="normal">Normal</button>
+            <button class="toggle-btn" data-mode="only_bhop" data-diff="hard">Hard</button>
+          </div>
+        </div>
+
+        <div class="mode-section">
+          <div class="mode-header">Only Surf</div>
+          <div class="mode-toggle-group">
+             <button class="toggle-btn" data-mode="only_surf" data-diff="easy">Easy</button>
+             <button class="toggle-btn" data-mode="only_surf" data-diff="normal">Normal</button>
+             <button class="toggle-btn" data-mode="only_surf" data-diff="hard">Hard</button>
+          </div>
+        </div>
+
+        <div class="mode-section">
+          <div class="mode-header">Bhop & Surf</div>
+          <div class="mode-toggle-group">
+             <button class="toggle-btn" data-mode="bhop_surf" data-diff="easy">Easy</button>
+             <button class="toggle-btn active" data-mode="bhop_surf" data-diff="normal">Normal</button>
+             <button class="toggle-btn" data-mode="bhop_surf" data-diff="hard">Hard</button>
+          </div>
+        </div>
+
+        <div class="mode-section">
+          <div class="mode-header">Challenge</div>
+          <div class="mode-toggle-group">
+            <button id="btn-obstacles" class="toggle-btn" data-mode="obstacles" data-diff="normal">Obstacles</button>
+          </div>
+        </div>
+
+      </div>
+      <div class="settings-actions">
+        <button id="btn-gamemode-back" class="menu-btn">Back</button>
+        <button id="btn-gamemode-apply" class="menu-btn btn-apply">Apply</button>
+      </div>
+    `;
+
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    menu.addEventListener('mousedown', (e) => e.stopPropagation());
+
+    this.gamemodeBackBtn = menu.querySelector('#btn-gamemode-back') as HTMLElement;
+    this.gamemodeApplyBtn = menu.querySelector('#btn-gamemode-apply') as HTMLElement;
+
+    const btns = menu.querySelectorAll('.toggle-btn');
+    btns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const mode = target.getAttribute('data-mode');
+        const diff = target.getAttribute('data-diff');
+
+        if (mode && diff) {
+          this.pendingMode = mode;
+          this.pendingDifficulty = diff;
+
+          btns.forEach(b => b.classList.remove('active'));
+          target.classList.add('active');
+        }
+      });
+    });
+
+    this.gamemodeApplyBtn.addEventListener('click', () => {
+      if (this.pendingMode !== this.currentMode || this.pendingDifficulty !== this.currentDifficulty) {
+        this.currentMode = this.pendingMode;
+        this.currentDifficulty = this.pendingDifficulty;
+
+        GAME_STATE.currentMode = this.pendingMode;
+        GAME_STATE.currentDifficulty = this.pendingDifficulty;
+        this.hasModeChanged = true;
+      }
+
+      this.closeGameModeMenu();
+    });
+
+    this.gamemodeBackBtn.addEventListener('click', () => {
+      this.closeGameModeMenu();
+    });
+
+    return menu;
+  }
+
+  private closeGameModeMenu(showMain: boolean = true) {
+    this.pendingMode = this.currentMode;
+    this.pendingDifficulty = this.currentDifficulty;
+
+    const btns = this.gameModeMenu.querySelectorAll('.toggle-btn');
+    btns.forEach(b => {
+      b.classList.remove('active');
+      const mode = b.getAttribute('data-mode');
+      const diff = b.getAttribute('data-diff');
+      if (mode === this.currentMode && diff === this.currentDifficulty) {
+        b.classList.add('active');
+      }
+    });
+
+    this.gameModeMenu.classList.add('hidden');
+    if (showMain) {
+      this.mainMenu.classList.remove('hidden');
+    }
   }
 
   private createAuthModal(): HTMLElement {
@@ -269,6 +408,24 @@ export class UIManager {
 
     menu.innerHTML = `
       <h1 class="menu-title">Leaderboard</h1>
+
+      <div class="mode-section">
+        <div class="mode-toggle-group">
+          <button class="toggle-btn" data-lb-mode="only_bhop">Bhop</button>
+          <button class="toggle-btn" data-lb-mode="only_surf">Surf</button>
+          <button class="toggle-btn active" data-lb-mode="bhop_surf">BHOP & SURF</button>
+          <button class="toggle-btn" data-lb-mode="obstacles">Obstacles</button>
+        </div>
+      </div>
+      
+      <div class="mode-section">
+        <div class="mode-toggle-group">
+          <button class="toggle-btn" data-lb-diff="easy">Easy</button>
+          <button class="toggle-btn active" data-lb-diff="normal">Normal</button>
+          <button class="toggle-btn" data-lb-diff="hard">Hard</button>
+        </div>
+      </div>
+
       <div class="leaderboard-container">
         <div class="lb-header">
           <span>Rank</span>
@@ -288,12 +445,98 @@ export class UIManager {
     this.lbList = menu.querySelector('#lb-list') as HTMLElement;
     this.lbBackBtn = menu.querySelector('#btn-lb-back') as HTMLElement;
 
+    const modeBtns = menu.querySelectorAll('button[data-lb-mode]');
+    const diffBtns = menu.querySelectorAll('button[data-lb-diff]');
+
+    modeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.getAttribute('data-lb-mode')!;
+        this.viewedMode = mode;
+
+        if (mode === 'obstacles') {
+          this.viewedDifficulty = 'normal';
+        }
+
+        this.refreshLeaderboard();
+      });
+    });
+
+    diffBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('disabled')) return;
+
+        this.viewedDifficulty = btn.getAttribute('data-lb-diff')!;
+        this.refreshLeaderboard();
+      });
+    });
+
     this.lbBackBtn.addEventListener('click', () => {
       this.leaderboardMenu.classList.add('hidden');
       this.mainMenu.classList.remove('hidden');
     });
 
     return menu;
+  }
+
+  private currentLeaderboardRequestId: number = 0;
+
+  private refreshLeaderboard() {
+    this.updateLeaderboardUIState();
+    this.lbList.innerHTML = '<div class="lb-empty">Loading...</div>';
+
+    const requestId = ++this.currentLeaderboardRequestId;
+
+    if (this.onShowLeaderboard) {
+      this.onShowLeaderboard(this.viewedMode, this.viewedDifficulty, requestId);
+    }
+  }
+
+  private updateLeaderboardUIState() {
+    const modeBtns = this.leaderboardMenu.querySelectorAll('button[data-lb-mode]');
+    modeBtns.forEach(b => {
+      const mode = b.getAttribute('data-lb-mode');
+
+      if (mode === this.viewedMode) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+
+      if (mode === GAME_STATE.currentMode) {
+        b.classList.add('current-game-state');
+      } else {
+        b.classList.remove('current-game-state');
+      }
+    });
+
+    const diffBtns = this.leaderboardMenu.querySelectorAll('button[data-lb-diff]');
+    const isObstacles = (this.viewedMode === 'obstacles');
+
+    diffBtns.forEach(b => {
+      const diff = b.getAttribute('data-lb-diff');
+
+      if (diff === this.viewedDifficulty) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+
+      if (diff === GAME_STATE.currentDifficulty) {
+        b.classList.add('current-game-state');
+      } else {
+        b.classList.remove('current-game-state');
+      }
+
+      if (isObstacles) {
+        if (diff !== 'normal') {
+          b.classList.add('disabled');
+        } else {
+          b.classList.remove('disabled');
+        }
+      } else {
+        b.classList.remove('disabled');
+      }
+    });
   }
 
   public setOfflineMode(isOffline: boolean) {
@@ -307,12 +550,22 @@ export class UIManager {
     }
   }
 
-  public showGameOver(score: number, highScore: number, isNewRecord: boolean, isLoggedIn: boolean) {
+  public showGameOver(score: number) {
     const elNewRecord = this.gameOverMenu.querySelector('#go-new-record') as HTMLElement;
     const elScore = this.gameOverMenu.querySelector('#go-score') as HTMLElement;
     const elHighscore = this.gameOverMenu.querySelector('#go-highscore') as HTMLElement;
 
     elScore.textContent = `SCORE: ${score.toFixed(2)}`;
+    elHighscore.textContent = `Highscore: ...`;
+    elNewRecord.classList.add('hidden');
+
+    this.toggleGameOver(true);
+  }
+
+  public updateGameOverHighscore(highScore: number, isNewRecord: boolean, isLoggedIn: boolean) {
+    const elNewRecord = this.gameOverMenu.querySelector('#go-new-record') as HTMLElement;
+    const elHighscore = this.gameOverMenu.querySelector('#go-highscore') as HTMLElement;
+
     elHighscore.textContent = `Highscore: ${highScore.toFixed(2)}`;
 
     if (isNewRecord) {
@@ -322,7 +575,6 @@ export class UIManager {
     }
 
     this.updateGameOverLoginMessage(isLoggedIn);
-    this.toggleGameOver(true);
   }
 
   public updateGameOverLoginMessage(isLoggedIn: boolean) {
@@ -340,6 +592,7 @@ export class UIManager {
       this.settingsMenu.classList.add('hidden');
       this.authModal.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
+      this.gameModeMenu.classList.add('hidden');
       this.gameOverMenu.classList.remove('hidden');
 
       this.footer.classList.remove('hidden');
@@ -351,7 +604,15 @@ export class UIManager {
     }
   }
 
-  public updateLeaderboard(entries: any[]) {
+  public updateLeaderboard(entries: any[], mode: string, difficulty: string, requestId: number) {
+    if (requestId !== this.currentLeaderboardRequestId) {
+      return;
+    }
+
+    if (mode !== this.viewedMode || difficulty !== this.viewedDifficulty) {
+      return;
+    }
+
     this.lbList.innerHTML = '';
 
     if (entries.length === 0) {
@@ -592,10 +853,19 @@ export class UIManager {
       if (this.onResume) this.onResume();
     });
 
+    this.gamemodeBtn.addEventListener('click', () => {
+      this.mainMenu.classList.add('hidden');
+      this.gameModeMenu.classList.remove('hidden');
+    });
+
     this.leaderboardBtn.addEventListener('click', () => {
       this.mainMenu.classList.add('hidden');
       this.leaderboardMenu.classList.remove('hidden');
-      if (this.onShowLeaderboard) this.onShowLeaderboard();
+
+      this.viewedMode = GAME_STATE.currentMode;
+      this.viewedDifficulty = GAME_STATE.currentDifficulty;
+
+      this.refreshLeaderboard();
     });
     this.settingsBtn.addEventListener('click', () => this.toggleSettings(true));
     this.visualsBtn.addEventListener('click', () => { });
@@ -840,6 +1110,7 @@ export class UIManager {
       this.authModal.classList.add('hidden');
       this.gameOverMenu.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
+      this.gameModeMenu.classList.add('hidden');
       this.footer.classList.remove('hidden');
       this.userHeader.classList.remove('hidden');
       this.hud.style.display = 'none';
@@ -855,6 +1126,13 @@ export class UIManager {
       this.authModal.classList.add('hidden');
       this.gameOverMenu.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
+
+      if (!this.gameModeMenu.classList.contains('hidden')) {
+        this.closeGameModeMenu(false);
+      } else {
+        this.gameModeMenu.classList.add('hidden');
+      }
+
       this.footer.classList.add('hidden');
       this.userHeader.classList.add('hidden');
 
@@ -879,7 +1157,8 @@ export class UIManager {
         this.mainMenu,
         this.gameOverMenu,
         this.settingsMenu,
-        this.leaderboardMenu
+        this.leaderboardMenu,
+        this.gameModeMenu
       ].find(m => !m.classList.contains('hidden')) || this.mainMenu;
 
       this.hideAuthError();
@@ -887,8 +1166,13 @@ export class UIManager {
       this.settingsMenu.classList.add('hidden');
       this.gameOverMenu.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
+      this.gameModeMenu.classList.add('hidden');
       this.authModal.classList.remove('hidden');
+      this.isAuthModalOpen = true;
     } else {
+      if (!this.isAuthModalOpen) return;
+
+      this.isAuthModalOpen = false;
       this.authModal.classList.add('hidden');
       if (this.previousMenu) {
         if (this.previousMenu === this.settingsMenu) {
@@ -951,6 +1235,11 @@ export class UIManager {
       return false;
     }
 
+    if (!this.gameModeMenu.classList.contains('hidden')) {
+      this.closeGameModeMenu();
+      return false;
+    }
+
     return true;
   }
 
@@ -961,6 +1250,7 @@ export class UIManager {
       this.mainMenu.classList.add('hidden');
       this.gameOverMenu.classList.add('hidden');
       this.leaderboardMenu.classList.add('hidden');
+      this.gameModeMenu.classList.add('hidden');
       this.settingsMenu.classList.remove('hidden');
     } else {
       this.closeSettingsInternal();
@@ -1016,5 +1306,13 @@ export class UIManager {
       this.loadingScreen.classList.add('hidden');
       this.loadingScreen.style.pointerEvents = 'none';
     }, 100);
+  }
+
+  public checkModeChanged(): boolean {
+    if (this.hasModeChanged) {
+      this.hasModeChanged = false;
+      return true;
+    }
+    return false;
   }
 }

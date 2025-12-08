@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BaseLevel } from './base_level';
 import { Chunk } from './chunk';
-import { GAME_CONFIG, type BlockType } from '../config';
+import { GAME_CONFIG, type BlockType, GAME_STATE, DIFFICULTY_SETTINGS, MODE_SETTINGS } from '../config';
 
 export class InfiniteLevel extends BaseLevel {
   private lastBlockEndZ: number = 5;
@@ -65,10 +65,13 @@ export class InfiniteLevel extends BaseLevel {
     if (futureLogicalIds.size < 4) {
       let typeData: BlockType;
 
-      if (this.isFirstGen) {
+      if (this.isFirstGen && GAME_STATE.currentMode !== 'only_surf' && GAME_STATE.currentMode !== 'only_bhop') {
         typeData = GAME_CONFIG.Level.BLOCK_TYPES[0];
         this.isFirstGen = false;
-      } else if (this.lastBlockType !== 'box') {
+      } else if (this.isFirstGen) {
+        typeData = this.pickBlockType();
+        this.isFirstGen = false;
+      } else if (this.lastBlockType !== 'box' && (GAME_STATE.currentMode === 'obstacles' || GAME_STATE.currentMode === 'bhop_surf')) {
         typeData = GAME_CONFIG.Level.BLOCK_TYPES[0];
       } else {
         typeData = this.pickBlockType();
@@ -76,10 +79,42 @@ export class InfiniteLevel extends BaseLevel {
 
       this.lastBlockType = typeData.type;
 
-      const size = typeData.size || [3, 1, 3];
+      let sizeMult = 1.0;
+      if (GAME_STATE.currentMode !== 'obstacles') {
+        const diffSettings = DIFFICULTY_SETTINGS[GAME_STATE.currentDifficulty as keyof typeof DIFFICULTY_SETTINGS];
+        if (diffSettings) {
+          sizeMult = diffSettings.sizeMult;
+        }
+      }
+
+      const baseSize = typeData.size || [3, 1, 3];
+      let size: [number, number, number];
+
+      if (typeData.type === 'ramp') {
+        size = [
+          baseSize[0],
+          baseSize[1],
+          baseSize[2] * sizeMult
+        ];
+      } else {
+        size = [
+          baseSize[0] * sizeMult,
+          baseSize[1],
+          baseSize[2] * sizeMult
+        ];
+      }
+
       const length = typeData.length ?? size[2];
 
-      const gap = (GAME_CONFIG.Level.SPACING_BASE * (typeData.spacingMult || 1.0)) + (playerSpeed / GAME_CONFIG.Level.SPACING_SPEED_FACTOR);
+      let spacingMult = 1.0;
+      if (GAME_STATE.currentMode !== 'obstacles') {
+        const diffSettings = DIFFICULTY_SETTINGS[GAME_STATE.currentDifficulty as keyof typeof DIFFICULTY_SETTINGS];
+        if (diffSettings) {
+          spacingMult = diffSettings.spacingMult;
+        }
+      }
+
+      const gap = (GAME_CONFIG.Level.SPACING_BASE * (typeData.spacingMult || 1.0) * spacingMult) + (playerSpeed / GAME_CONFIG.Level.SPACING_SPEED_FACTOR);
 
       const spawnZ = this.lastBlockEndZ + gap + (size[2] / 2);
 
@@ -94,11 +129,11 @@ export class InfiniteLevel extends BaseLevel {
 
         // Left Ramp
         const qLeft = new THREE.Quaternion();
-        this.spawnChunk('ramp', size, { x: -offset, y: rampY, z: spawnZ }, { x: qLeft.x, y: qLeft.y, z: qLeft.z, w: qLeft.w }, typeData.color, currentLogicalId);
+        this.spawnChunk('ramp', size, { x: x - offset, y: rampY, z: spawnZ }, { x: qLeft.x, y: qLeft.y, z: qLeft.z, w: qLeft.w }, typeData.color, currentLogicalId);
 
         // Right Ramp
         const qRight = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
-        this.spawnChunk('ramp', size, { x: offset, y: rampY, z: spawnZ }, { x: qRight.x, y: qRight.y, z: qRight.z, w: qRight.w }, typeData.color, currentLogicalId);
+        this.spawnChunk('ramp', size, { x: x + offset, y: rampY, z: spawnZ }, { x: qRight.x, y: qRight.y, z: qRight.z, w: qRight.w }, typeData.color, currentLogicalId);
 
       } else if (typeData.type === 'cross') {
         const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
@@ -159,16 +194,45 @@ export class InfiniteLevel extends BaseLevel {
   }
 
   private pickBlockType(): BlockType {
+    let allowedTypes: string[] = [];
+
+    if (GAME_STATE.currentMode === 'obstacles') {
+      allowedTypes = MODE_SETTINGS['obstacles'];
+    } else {
+      allowedTypes = MODE_SETTINGS[GAME_STATE.currentMode] || MODE_SETTINGS['bhop_surf'];
+    }
+
+    const availableBlocks = GAME_CONFIG.Level.BLOCK_TYPES.filter(b => allowedTypes.includes(b.type));
+
     const randomValue = Math.random();
     let cumulativeProbability = 0;
 
-    for (const block of GAME_CONFIG.Level.BLOCK_TYPES) {
-      cumulativeProbability += block.probability;
+    const modeSettings = GAME_CONFIG.Level.PROBABILITY_SETTINGS[GAME_STATE.currentMode];
+    const difficultySettings = modeSettings ? modeSettings[GAME_STATE.currentDifficulty] : null;
+
+    const totalProbability = availableBlocks.reduce((sum, b) => {
+      let prob = b.probability || 0;
+      if (difficultySettings && difficultySettings[b.type] !== undefined) {
+        prob = difficultySettings[b.type];
+      }
+      return sum + prob;
+    }, 0);
+
+    if (totalProbability <= 0) {
+      const randomIndex = Math.floor(Math.random() * availableBlocks.length);
+      return availableBlocks[randomIndex] || GAME_CONFIG.Level.BLOCK_TYPES[0];
+    }
+
+    for (const block of availableBlocks) {
+      let prob = block.probability || 0;
+      if (difficultySettings && difficultySettings[block.type] !== undefined) {
+        prob = difficultySettings[block.type];
+      }
+
+      cumulativeProbability += (prob / totalProbability);
       if (randomValue <= cumulativeProbability) {
         return block;
       }
-    }
-
-    return GAME_CONFIG.Level.BLOCK_TYPES[0];
+    } return availableBlocks[0] || GAME_CONFIG.Level.BLOCK_TYPES[0];
   }
 }

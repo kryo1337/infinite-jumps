@@ -1,6 +1,6 @@
 export interface BlockType {
   type: 'box' | 'ramp' | 'down_ramp' | 'cross' | 'damage' | 'teleport';
-  probability: number;
+  probability?: number;
   color: number;
   size?: [number, number, number];
   length?: number;
@@ -12,6 +12,37 @@ const COLORS = {
   DAMAGE: 0xff0000,
   THEME: 0xe0b0ff,
   TELEPORT: 0xffff00
+};
+
+export const GAME_STATE = {
+  currentMode: 'bhop_surf',
+  currentDifficulty: 'normal'
+};
+
+export const DIFFICULTY_SETTINGS = {
+  easy: { sizeMult: 1.5, spacingMult: 0.8 },
+  normal: { sizeMult: 1.0, spacingMult: 1.0 },
+  hard: { sizeMult: 0.5, spacingMult: 1.2 }
+};
+
+export const MODE_SETTINGS: { [key: string]: string[] } = {
+  'only_bhop': ['box'],
+  'only_surf': ['ramp'],
+  'bhop_surf': ['box', 'ramp'],
+  'obstacles': ['box', 'ramp', 'cross', 'damage', 'teleport']
+};
+
+export const MODE_DISPLAY_NAMES: { [key: string]: string } = {
+  'only_bhop': 'Only Bhop',
+  'only_surf': 'Only Surf',
+  'bhop_surf': 'Bhop & Surf',
+  'obstacles': 'Obstacles'
+};
+
+export const DIFFICULTY_DISPLAY_NAMES: { [key: string]: string } = {
+  'easy': 'Easy',
+  'normal': 'Normal',
+  'hard': 'Hard'
 };
 
 export const GAME_CONFIG = {
@@ -43,13 +74,33 @@ export const GAME_CONFIG = {
     X_SPREAD: 10.0,
     Y_OFFSET: 0,
     COLORS,
+    PROBABILITY_SETTINGS: {
+      'only_bhop': {
+        'easy': { 'box': 1.0 },
+        'normal': { 'box': 1.0 },
+        'hard': { 'box': 1.0 }
+      },
+      'only_surf': {
+        'easy': { 'ramp': 1.0 },
+        'normal': { 'ramp': 1.0 },
+        'hard': { 'ramp': 1.0 }
+      },
+      'bhop_surf': {
+        'easy': { 'box': 0.8, 'ramp': 0.2 },
+        'normal': { 'box': 0.8, 'ramp': 0.2 },
+        'hard': { 'box': 0.8, 'ramp': 0.2 }
+      },
+      'obstacles': {
+        'normal': { 'box': 0.65, 'ramp': 0.2, 'damage': 0.05, 'cross': 0.05, 'teleport': 0.05 }
+      }
+    } as { [mode: string]: { [diff: string]: { [type: string]: number } } },
     BLOCK_TYPES: [
-      { type: 'box', probability: 0.7, color: COLORS.THEME, size: [3, 1, 3] },
-      { type: 'teleport', probability: 0.05, color: COLORS.TELEPORT, size: [15, 1, 3] },
-      { type: 'damage', probability: 0.05, color: COLORS.DAMAGE, size: [3, 1, 3] },
-      { type: 'cross', probability: 0.05, color: COLORS.THEME, size: [6, 6, 0.5], length: 6, extraParams: { armWidth: 1 } },
-      { type: 'ramp', probability: 0.15, color: COLORS.THEME, size: [4, 5, 12], spacingMult: 1.5 },
-      // { type: 'down_ramp', probability: 0.00, color: COLORS.THEME, size: [9, 22, 27], length: 60, spacingMult: -1, extraParams: { modelPath: '/models/rampdown.glb' } }
+      { type: 'box', color: COLORS.THEME, size: [3, 1, 3] },
+      { type: 'teleport', color: COLORS.TELEPORT, size: [15, 1, 3] },
+      { type: 'damage', color: COLORS.DAMAGE, size: [3, 1, 3] },
+      { type: 'cross', color: COLORS.THEME, size: [6, 6, 0.5], length: 6, extraParams: { armWidth: 1 } },
+      { type: 'ramp', color: COLORS.THEME, size: [4, 5, 12], spacingMult: 1.5 },
+      // { type: 'down_ramp', color: COLORS.THEME, size: [9, 22, 27], length: 60, spacingMult: -1, extraParams: { modelPath: '/models/rampdown.glb' } }
     ] as BlockType[]
   }
 };
