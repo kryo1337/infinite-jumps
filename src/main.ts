@@ -6,7 +6,8 @@ import { LevelLoader } from './level_loader';
 import { UIManager } from './ui_manager';
 import { AuthManager } from './auth_manager';
 import { GameLoader } from './utils/game_loader';
-import { GAME_CONFIG } from './config';
+import { GAME_CONFIG, DEFAULT_THEME } from './config';
+import type { Theme } from './config';
 
 // --- GLOBAL VARIABLES ---
 let player: PlayerController;
@@ -16,6 +17,7 @@ let isPaused = false;
 let isGameOver = false;
 let lastStateChangeTime = 0;
 let listenersAttached = false;
+let currentTheme: Theme = DEFAULT_THEME;
 
 // --- SCENE SETUP ---
 const scene = new THREE.Scene();
@@ -46,26 +48,52 @@ const world = new RAPIER.World(GAME_CONFIG.World.gravity);
 // --- UI INIT ---
 const ui = new UIManager(GAME_CONFIG.World.defaultSensitivity);
 
-// --- GAME LOADER ---
-const gameLoader = new GameLoader(scene);
-const isHardwareAccelerated = gameLoader.checkHardwareAcceleration(renderer);
-if (!isHardwareAccelerated) {
-  console.warn("Hardware acceleration disabled or software renderer detected.");
-  ui.showHardwareWarning();
-}
+// --- AUTH INIT ---
+authManager = new AuthManager();
+let isInitialLoad = true;
 
-gameLoader.load(
-  () => {
-    document.body.appendChild(renderer.domElement);
-    initGame();
-    ui.hideLoadingScreen();
-  },
-  (item, percent) => {
-    ui.updateLoading(item, percent);
+// --- STARTUP SEQUENCE ---
+(async () => {
+  if (authManager.isOfflineMode) {
+    ui.setOfflineMode(true);
   }
-);
 
-function initGame() {
+  await authManager.waitForInitialAuth();
+
+  let initialTheme = DEFAULT_THEME;
+  if (authManager.currentUser) {
+    const dbTheme = await authManager.syncActiveThemeFromDB();
+    if (dbTheme) {
+      initialTheme = dbTheme;
+    } else {
+      initialTheme = authManager.getActiveTheme() || DEFAULT_THEME;
+    }
+  } else {
+    initialTheme = authManager.getActiveTheme() || DEFAULT_THEME;
+  }
+
+  // --- GAME LOADER ---
+  const gameLoader = new GameLoader(scene);
+  const isHardwareAccelerated = gameLoader.checkHardwareAcceleration(renderer);
+  if (!isHardwareAccelerated) {
+    console.warn("Hardware acceleration disabled or software renderer detected.");
+    ui.showHardwareWarning();
+  }
+
+  gameLoader.load(
+    initialTheme.skyboxPath,
+    async () => {
+      document.body.appendChild(renderer.domElement);
+      await initGame(initialTheme, gameLoader);
+      ui.hideLoadingScreen();
+    },
+    (item, percent) => {
+      ui.updateLoading(item, percent);
+    }
+  );
+})();
+
+async function initGame(initialTheme: Theme, gameLoader: GameLoader) {
   // --- WORLD GEN ---
   levelLoader = new LevelLoader(scene, world);
   levelLoader.loadLevel(GAME_CONFIG.World.initialLevel);
@@ -75,17 +103,14 @@ function initGame() {
     mouseSensitivity: GAME_CONFIG.World.defaultSensitivity,
   });
 
-  // --- AUTH ---
-  authManager = new AuthManager();
-  if (authManager.isOfflineMode) {
-    ui.setOfflineMode(true);
-  }
-
   // --- UI WIRING ---
   ui.onLoadLevel = (type) => {
     if (type === 'infinite') {
       levelLoader.loadLevel(type);
       player.respawn();
+      if (currentTheme) {
+        levelLoader.updateChunkColors(currentTheme.colors);
+      }
       document.body.requestPointerLock();
     }
   };
@@ -124,11 +149,32 @@ function initGame() {
     }
   };
 
-  authManager.onAuthStateChanged = (user) => {
-    ui.updateUserHeader(user);
+  authManager.onAuthStateChanged = async (user) => {
+    ui.updateUserHeader(user, authManager.settings.nickname);
     ui.updateGameOverLoginMessage(!!user);
     if (user) {
       ui.toggleAuthModal(false);
+
+      if (!isInitialLoad) {
+        try {
+          const dbTheme = await authManager.syncActiveThemeFromDB();
+          if (dbTheme) {
+            applyTheme(dbTheme, gameLoader);
+            ui.updateCurrentThemeName(dbTheme.name);
+            currentTheme = dbTheme;
+          }
+        } catch (e) {
+          console.error("Failed to sync theme from DB:", e);
+        }
+      }
+    } else {
+      if (!isInitialLoad) {
+        authManager.clearActiveTheme();
+        const defaultTheme = DEFAULT_THEME;
+        applyTheme(defaultTheme, gameLoader);
+        ui.updateCurrentThemeName(defaultTheme.name);
+        currentTheme = defaultTheme;
+      }
     }
   };
 
@@ -148,10 +194,58 @@ function initGame() {
     ui.updateLeaderboard(result.entries, result.mode, result.difficulty, requestId);
   };
 
+  // --- THEME ---
+  ui.onApplyTheme = async (themeData) => {
+    try {
+      const savedId = await authManager.saveTheme({
+        name: themeData.name,
+        skyboxPath: themeData.skyboxPath,
+        colors: themeData.colors
+      });
+
+      const fullTheme: Theme = {
+        ...themeData,
+        id: savedId,
+        authorUid: authManager.currentUser?.uid || 'unknown'
+      };
+
+      authManager.setActiveTheme(fullTheme);
+      applyTheme(fullTheme, gameLoader);
+    } catch (e: any) {
+      throw e;
+    }
+  };
+
+  ui.onSelectTheme = async (theme) => {
+    authManager.setActiveTheme(theme);
+    applyTheme(theme, gameLoader);
+  };
+
+  ui.onLoadUserThemes = async () => {
+    return await authManager.getUserThemes();
+  };
+
+  ui.onDeleteTheme = async (themeId) => {
+    await authManager.deleteTheme(themeId);
+  };
+
+  ui.onBookmarkTheme = async (themeId) => {
+    await authManager.bookmarkTheme(themeId);
+  };
+
+  ui.onImportTheme = async (themeId) => {
+    return await authManager.getThemeById(themeId);
+  };
+
+  currentTheme = initialTheme;
+  applyTheme(currentTheme, gameLoader);
+
   setupEventListeners();
 
   isPaused = false;
   document.body.requestPointerLock();
+
+  isInitialLoad = false;
 
   gameLoop();
 }
@@ -161,6 +255,28 @@ function getFriendlyErrorMessage(code: string): string | null {
     case 'auth/user-disabled': return 'This account has been banned.';
     case 'auth/popup-closed-by-user': return 'Sign-in popup was closed.';
     default: return null;
+  }
+}
+
+function applyTheme(theme: Theme, gameLoader: GameLoader) {
+  currentTheme = theme;
+  ui.activeTheme = theme;
+  ui.updateCurrentThemeName(theme.name);
+
+  if (levelLoader) {
+    levelLoader.updateChunkColors(theme.colors);
+  }
+
+  if (theme.skyboxPath !== gameLoader.getCurrentSkyboxPath()) {
+    gameLoader.loadSkyboxFromPath(theme.skyboxPath);
+  }
+
+  document.documentElement.style.setProperty('--theme-color-mauve', theme.colors.primary);
+
+  const crosshair = document.getElementById('crosshair');
+  if (crosshair) {
+    crosshair.style.borderColor = theme.colors.crosshairOutline;
+    crosshair.style.backgroundColor = theme.colors.crosshairInner;
   }
 }
 
@@ -174,6 +290,11 @@ const performRestart = () => {
 
   player.respawn();
   levelLoader.loadLevel('infinite');
+
+  if (currentTheme) {
+    levelLoader.updateChunkColors(currentTheme.colors);
+  }
+
   document.body.requestPointerLock();
 };
 

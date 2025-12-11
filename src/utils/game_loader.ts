@@ -6,6 +6,7 @@ import { ModelLoader } from './model_loader';
 export class GameLoader {
   private manager: THREE.LoadingManager;
   private scene: THREE.Scene;
+  private currentSkyboxPath: string = '';
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -32,6 +33,7 @@ export class GameLoader {
   }
 
   public load(
+    skyboxPath: string,
     onLoad: () => void,
     onProgress: (item: string, percent: number) => void
   ) {
@@ -44,18 +46,32 @@ export class GameLoader {
       onProgress(filename, percent);
     };
 
-    this.loadSkybox();
+    this.loadSkybox(skyboxPath);
     this.loadRampModel();
   }
 
-  private loadSkybox() {
-    const skyboxPath = '/textures/skybox/DayInTheClouds4k.hdr';
-    new HDRLoader(this.manager).load(
-      skyboxPath,
+  private loadSkybox(path: string) {
+    this.loadSkyboxFromPath(path, this.manager);
+  }
+
+  public loadSkyboxFromPath(path: string, manager?: THREE.LoadingManager): void {
+    if (path === this.currentSkyboxPath) {
+      return;
+    }
+
+    const loader = manager ? new HDRLoader(manager) : new HDRLoader();
+
+    loader.load(
+      path,
       (texture) => {
+        if (this.scene.background && (this.scene.background as THREE.Texture).isTexture) {
+          (this.scene.background as THREE.Texture).dispose();
+        }
+
         texture.mapping = THREE.EquirectangularReflectionMapping;
         this.scene.background = texture;
         this.scene.environment = texture;
+        this.currentSkyboxPath = path;
       },
       undefined,
       (error) => {
@@ -64,6 +80,10 @@ export class GameLoader {
         this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
       }
     );
+  }
+
+  public getCurrentSkyboxPath(): string {
+    return this.currentSkyboxPath;
   }
 
   private loadRampModel() {

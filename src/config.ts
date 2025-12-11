@@ -8,6 +8,56 @@ export interface BlockType {
   spacingMult?: number;
 }
 
+export interface ThemeColors {
+  primary: string;
+  bhop: string;
+  surf: string;
+  teleport: string;
+  damage: string;
+  crosshairOutline: string;
+  crosshairInner: string;
+}
+
+export interface Theme {
+  id?: string;
+  name: string;
+  authorUid: string;
+  author?: string;
+  skyboxPath: string;
+  colors: ThemeColors;
+}
+
+export const DEFAULT_THEME: Theme = {
+  name: 'Default',
+  authorUid: 'system',
+  skyboxPath: '/textures/skybox/DayInTheClouds4k.hdr',
+  colors: {
+    primary: '#e0b0ff',
+    bhop: '#e0b0ff',
+    surf: '#e0b0ff',
+    teleport: '#ffff00',
+    damage: '#ff0000',
+    crosshairOutline: '#000000',
+    crosshairInner: '#ffffff'
+  }
+};
+
+export const SKYBOX_OPTIONS = [
+  'AmbienceExposure4k.hdr',
+  'CasualDay4K.hdr',
+  'CloudedSunGlow4k.hdr',
+  'Cloudymorning4k.hdr',
+  'CoriolisNight4k.hdr',
+  'DarkStorm4K.hdr',
+  'DayInTheClouds4k.hdr',
+  'HighFantasy4k.hdr',
+  'PlanetaryEarth4k.hdr',
+  'SkyhighFluffycloudField4k.hdr',
+  'SunlessCirruscover4k.hdr',
+  'UnderTheSea4k.hdr',
+  'UnearthlyRed4k.hdr'
+];
+
 const COLORS = {
   DAMAGE: 0xff0000,
   THEME: 0xe0b0ff,

@@ -153,16 +153,16 @@ export class InfiniteLevel extends BaseLevel {
         const isLeftSafe = Math.random() > 0.5;
 
         // Left Chunk
-        const leftChunk = this.spawnChunk('box', size, { x: x - offset, y: y, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, isLeftSafe ? safeColor : damageColor, currentLogicalId);
+        const leftChunk = this.spawnChunk('box', size, { x: x - offset, y: y, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, isLeftSafe ? safeColor : damageColor, currentLogicalId, undefined, !isLeftSafe, false);
         if (!isLeftSafe) leftChunk.isDeadly = true;
 
         // Right Chunk
-        const rightChunk = this.spawnChunk('box', size, { x: x + offset, y: y, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, !isLeftSafe ? safeColor : damageColor, currentLogicalId);
+        const rightChunk = this.spawnChunk('box', size, { x: x + offset, y: y, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, !isLeftSafe ? safeColor : damageColor, currentLogicalId, undefined, isLeftSafe, false);
         if (isLeftSafe) rightChunk.isDeadly = true;
 
       } else if (typeData.type === 'teleport') {
         // Teleport Source
-        const sourceChunk = this.spawnChunk('box', size, { x: x, y: y, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, typeData.color, currentLogicalId);
+        const sourceChunk = this.spawnChunk('box', size, { x: x, y: y, z: spawnZ }, { x: 0, y: 0, z: 0, w: 1 }, typeData.color, currentLogicalId, undefined, false, true);
         const teleportHeight = 200;
         sourceChunk.teleportOffset = new THREE.Vector3(0, teleportHeight, 0);
 
@@ -185,9 +185,28 @@ export class InfiniteLevel extends BaseLevel {
     rot: { x: number, y: number, z: number, w: number },
     color: number,
     logicalId: number,
-    extraParams?: any
+    extraParams?: any,
+    isDeadly: boolean = false,
+    isTeleport: boolean = false
   ): Chunk {
-    const chunk = this.chunkManager.spawnChunk(type, size, pos, rot, color, extraParams);
+    const themeColors = this.chunkManager.getThemeColors();
+    let finalColor = color;
+
+    if (themeColors) {
+      if (isDeadly) {
+        finalColor = parseInt(themeColors.damage.slice(1), 16);
+      } else if (isTeleport) {
+        finalColor = parseInt(themeColors.teleport.slice(1), 16);
+      } else if (type === 'box') {
+        finalColor = parseInt(themeColors.bhop.slice(1), 16);
+      } else if (type === 'ramp') {
+        finalColor = parseInt(themeColors.surf.slice(1), 16);
+      } else {
+        finalColor = parseInt(themeColors.primary.slice(1), 16);
+      }
+    }
+
+    const chunk = this.chunkManager.spawnChunk(type, size, pos, rot, finalColor, extraParams);
     chunk.logicalId = logicalId;
     this.activeChunks.push(chunk);
     return chunk;

@@ -20,10 +20,15 @@ import {
   orderBy,
   limit,
   getDocs,
-  runTransaction
+  runTransaction,
+  addDoc,
+  deleteDoc,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { GAME_STATE, MODE_SETTINGS, DIFFICULTY_SETTINGS } from './config';
+import type { Theme, ThemeColors } from './config';
 
 const FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -60,7 +65,7 @@ export class AuthManager {
 
   private _currentUser: User | null = null;
   public onSettingsLoaded: ((settings: UserSettings) => void) | null = null;
-  public onAuthStateChanged: ((user: User | null) => void) | null = null;
+  private _onAuthStateChangedCallback: ((user: User | null) => void) | null = null;
   public isOfflineMode: boolean = false;
 
   private defaultSettings: UserSettings = {
@@ -79,7 +84,15 @@ export class AuthManager {
 
   private _currentSettings: UserSettings = { ...this.defaultSettings };
 
+  private initialAuthResolved = false;
+  private initialAuthPromise: Promise<void>;
+  private resolveInitialAuth!: () => void;
+
   constructor() {
+    this.initialAuthPromise = new Promise((resolve) => {
+      this.resolveInitialAuth = resolve;
+    });
+
     try {
       this.app = initializeApp(FIREBASE_CONFIG);
       this.auth = getAuth(this.app);
@@ -87,14 +100,37 @@ export class AuthManager {
 
       onAuthStateChanged(this.auth, async (user) => {
         this._currentUser = user;
-        if (this.onAuthStateChanged) {
-          this.onAuthStateChanged(user);
+        if (this._onAuthStateChangedCallback) {
+          this._onAuthStateChangedCallback(user);
         }
         await this.loadSettings();
+        if (!this.initialAuthResolved) {
+          this.initialAuthResolved = true;
+          this.resolveInitialAuth();
+        }
       });
     } catch (error) {
       this.isOfflineMode = true;
+      if (!this.initialAuthResolved) {
+        this.initialAuthResolved = true;
+        this.resolveInitialAuth();
+      }
     }
+  }
+
+  public set onAuthStateChanged(callback: ((user: User | null) => void) | null) {
+    this._onAuthStateChangedCallback = callback;
+    if (this.initialAuthResolved) {
+      callback?.(this._currentUser);
+    }
+  }
+
+  public get onAuthStateChanged() {
+    return this._onAuthStateChangedCallback;
+  }
+
+  public async waitForInitialAuth(): Promise<void> {
+    return this.initialAuthPromise;
   }
 
   public get currentUser(): User | null {
@@ -395,5 +431,269 @@ export class AuthManager {
     if (this.onSettingsLoaded) {
       this.onSettingsLoaded(settings);
     }
+  }
+
+  private static readonly THEME_LIMIT = 10;
+  private static readonly THEME_STORAGE_KEY = 'kz_active_theme';
+
+  public async saveTheme(themeData: Omit<Theme, 'id' | 'authorUid'>): Promise<string> {
+    if (!this._currentUser || !this.db) {
+      throw new Error('You must be logged in to save themes');
+    }
+
+    if (!themeData.name || themeData.name.trim().length === 0) {
+      throw new Error('Theme name is required');
+    }
+
+    const userThemes = await this.getUserThemes();
+    if (userThemes.length >= AuthManager.THEME_LIMIT) {
+      throw new Error(`Maximum ${AuthManager.THEME_LIMIT} themes allowed per user`);
+    }
+
+    const hexRegex = /^#[0-9A-Fa-f]{6}$/;
+    for (const [key, value] of Object.entries(themeData.colors)) {
+      if (!hexRegex.test(value)) {
+        throw new Error(`Invalid color format for ${key}: ${value}`);
+      }
+    }
+
+    try {
+      const themesRef = collection(this.db, 'themes');
+      const docRef = await addDoc(themesRef, {
+        ...themeData,
+        name: themeData.name.trim(),
+        authorUid: this._currentUser.uid,
+        author: this.getNickname(),
+        createdAt: Date.now()
+      });
+
+      return docRef.id;
+    } catch (error) {
+      console.error('Error saving theme:', error);
+      throw new Error('Failed to save theme');
+    }
+  }
+
+  public async bookmarkTheme(themeId: string): Promise<void> {
+    if (!this._currentUser || !this.db) {
+      throw new Error('You must be logged in to bookmark themes');
+    }
+
+    try {
+      const themeRef = doc(this.db, 'themes', themeId);
+      const themeSnap = await getDoc(themeRef);
+      if (!themeSnap.exists()) {
+        throw new Error('Theme not found');
+      }
+
+      const userRef = doc(this.db, 'users', this._currentUser.uid);
+      await updateDoc(userRef, {
+        bookmarkedThemes: arrayUnion(themeId)
+      });
+    } catch (error) {
+      console.error('Error bookmarking theme:', error);
+      throw error;
+    }
+  }
+
+  public async getUserThemes(): Promise<Theme[]> {
+    if (!this._currentUser || !this.db) {
+      return [];
+    }
+
+    try {
+      const themesMap = new Map<string, Theme>();
+
+      const themesRef = collection(this.db, 'themes');
+      const q = query(
+        themesRef,
+        where('authorUid', '==', this._currentUser.uid),
+        orderBy('createdAt', 'desc')
+      );
+
+      const authoredSnapshot = await getDocs(q);
+      authoredSnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        themesMap.set(docSnap.id, {
+          id: docSnap.id,
+          name: data.name,
+          authorUid: data.authorUid,
+          author: data.author || this.getNickname(),
+          skyboxPath: data.skyboxPath,
+          colors: data.colors as ThemeColors
+        });
+      });
+
+      const userRef = doc(this.db, 'users', this._currentUser.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const bookmarkedIds = userData.bookmarkedThemes as string[] || [];
+
+        const idsToFetch = bookmarkedIds.filter(id => !themesMap.has(id));
+
+        if (idsToFetch.length > 0) {
+          const promises = [];
+          for (let i = 0; i < idsToFetch.length; i += 10) {
+            const batch = idsToFetch.slice(i, i + 10);
+            const qBookmarks = query(themesRef, where('__name__', 'in', batch));
+            promises.push(getDocs(qBookmarks));
+          }
+
+          const snapshots = await Promise.all(promises);
+          snapshots.forEach(snap => {
+            snap.forEach((docSnap) => {
+              const data = docSnap.data();
+              themesMap.set(docSnap.id, {
+                id: docSnap.id,
+                name: data.name,
+                authorUid: data.authorUid,
+                author: data.author || 'Unknown',
+                skyboxPath: data.skyboxPath,
+                colors: data.colors as ThemeColors
+              });
+            });
+          });
+        }
+      }
+
+      return Array.from(themesMap.values());
+    } catch (error) {
+      console.error('Error fetching user themes:', error);
+      return [];
+    }
+  }
+
+  public async deleteTheme(themeId: string): Promise<void> {
+    if (!this._currentUser || !this.db) {
+      throw new Error('You must be logged in to manage themes');
+    }
+
+    try {
+      const themeRef = doc(this.db, 'themes', themeId);
+      const themeSnap = await getDoc(themeRef);
+
+      if (!themeSnap.exists()) {
+        const userRef = doc(this.db, 'users', this._currentUser.uid);
+        await updateDoc(userRef, {
+          bookmarkedThemes: arrayRemove(themeId)
+        });
+        return;
+      }
+
+      const themeData = themeSnap.data();
+
+      if (themeData.authorUid === this._currentUser.uid) {
+        await deleteDoc(themeRef);
+      } else {
+        const userRef = doc(this.db, 'users', this._currentUser.uid);
+        await updateDoc(userRef, {
+          bookmarkedThemes: arrayRemove(themeId)
+        });
+      }
+
+      const activeTheme = this.getActiveTheme();
+      if (activeTheme && activeTheme.id === themeId) {
+        localStorage.removeItem(AuthManager.THEME_STORAGE_KEY);
+      }
+    } catch (error: any) {
+      console.error('Error deleting theme:', error);
+      throw error;
+    }
+  }
+
+  public async getThemeById(themeId: string): Promise<Theme | null> {
+    if (!this.db) {
+      return null;
+    }
+
+    try {
+      const themeRef = doc(this.db, 'themes', themeId);
+      const themeSnap = await getDoc(themeRef);
+
+      if (!themeSnap.exists()) {
+        return null;
+      }
+
+      const data = themeSnap.data();
+      return {
+        id: themeSnap.id,
+        name: data.name,
+        authorUid: data.authorUid,
+        author: data.author || 'Unknown',
+        skyboxPath: data.skyboxPath,
+        colors: data.colors as ThemeColors
+      };
+    } catch (error) {
+      console.error('Error fetching theme by ID:', error);
+      return null;
+    }
+  }
+
+  public setActiveTheme(theme: Theme): void {
+    try {
+      localStorage.setItem(AuthManager.THEME_STORAGE_KEY, JSON.stringify(theme));
+
+      if (this._currentUser && this.db && theme.id) {
+        const userRef = doc(this.db, 'users', this._currentUser.uid);
+        setDoc(userRef, { activeThemeId: theme.id }, { merge: true }).catch(err => {
+          console.error('Failed to sync active theme to DB:', err);
+        });
+      }
+    } catch (error) {
+      console.error('Error saving active theme to localStorage:', error);
+    }
+  }
+
+  public async syncActiveThemeFromDB(): Promise<Theme | null> {
+    if (!this._currentUser || !this.db) {
+      return null;
+    }
+
+    try {
+      const userRef = doc(this.db, 'users', this._currentUser.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const activeThemeId = userData.activeThemeId;
+
+        if (activeThemeId) {
+          const theme = await this.getThemeById(activeThemeId);
+          if (theme) {
+            localStorage.setItem(AuthManager.THEME_STORAGE_KEY, JSON.stringify(theme));
+            return theme;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing active theme from DB:', error);
+    }
+
+    return null;
+  }
+
+  public getActiveTheme(): Theme | null {
+    try {
+      const stored = localStorage.getItem(AuthManager.THEME_STORAGE_KEY);
+      if (!stored) {
+        return null;
+      }
+
+      const parsed = JSON.parse(stored);
+
+      if (!parsed.colors || !parsed.skyboxPath) {
+        return null;
+      }
+
+      return parsed as Theme;
+    } catch (error) {
+      console.error('Error reading active theme from localStorage:', error);
+      return null;
+    }
+  }
+
+  public clearActiveTheme(): void {
+    localStorage.removeItem(AuthManager.THEME_STORAGE_KEY);
   }
 }

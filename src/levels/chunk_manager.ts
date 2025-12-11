@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Chunk } from './chunk';
 import { ShapeFactory } from './shape_factory';
 import { ModelLoader } from '../utils/model_loader';
+import type { ThemeColors } from '../config';
 
 export class ChunkManager {
   private scene: THREE.Scene;
@@ -11,6 +12,8 @@ export class ChunkManager {
   private pools: Map<string, Chunk[]> = new Map();
 
   private geometryCache: Map<string, THREE.BufferGeometry> = new Map();
+
+  private themeColors: ThemeColors | null = null;
 
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
@@ -145,5 +148,38 @@ export class ChunkManager {
 
     this.geometryCache.forEach(g => g.dispose());
     this.geometryCache.clear();
+  }
+
+  public setThemeColors(colors: ThemeColors): void {
+    this.themeColors = colors;
+  }
+
+  public getThemeColors(): ThemeColors | null {
+    return this.themeColors;
+  }
+
+  public getColorForBlockType(blockType: string, isDeadly: boolean = false, isTeleport: boolean = false): number {
+    if (!this.themeColors) {
+      if (isDeadly) return 0xff0000;
+      if (isTeleport) return 0xffff00;
+      return 0xe0b0ff;
+    }
+
+    if (isDeadly) {
+      return parseInt(this.themeColors.damage.slice(1), 16);
+    }
+
+    if (isTeleport) {
+      return parseInt(this.themeColors.teleport.slice(1), 16);
+    }
+
+    switch (blockType) {
+      case 'box':
+        return parseInt(this.themeColors.bhop.slice(1), 16);
+      case 'ramp':
+        return parseInt(this.themeColors.surf.slice(1), 16);
+      default:
+        return parseInt(this.themeColors.primary.slice(1), 16);
+    }
   }
 }

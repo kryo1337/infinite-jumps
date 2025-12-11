@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { BaseLevel } from './levels/base_level';
 import { InfiniteLevel } from './levels/infinite';
+import type { ThemeColors } from './config';
 
 export type LevelType = 'infinite';
 
@@ -63,6 +64,12 @@ export class LevelLoader {
   public setMinYThreshold(y: number) {
     if (this.currentLevel) {
       this.currentLevel.setMinYThreshold(y);
+    }
+  }
+
+  public updateChunkColors(colors: ThemeColors) {
+    if (this.currentLevel) {
+      this.currentLevel.updateChunkColors(colors);
     }
   }
 }

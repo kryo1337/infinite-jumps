@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Chunk } from './chunk';
 import { ChunkManager } from './chunk_manager';
+import type { ThemeColors } from '../config';
 
 export abstract class BaseLevel {
   protected scene: THREE.Scene;
@@ -66,5 +67,58 @@ export abstract class BaseLevel {
 
   public setMinYThreshold(_y: number): void {
     // override in subclasses
+  }
+
+  public updateChunkColors(colors: ThemeColors): void {
+    this.chunkManager.setThemeColors(colors);
+
+    for (const chunk of this.activeChunks) {
+      const colorHex = this.getColorForChunk(chunk, colors);
+      this.applyColorToChunk(chunk, colorHex);
+    }
+  }
+
+  protected getColorForChunk(chunk: Chunk, colors: ThemeColors): number {
+    if (chunk.isDeadly) {
+      return parseInt(colors.damage.slice(1), 16);
+    }
+
+    if (chunk.teleportOffset) {
+      return parseInt(colors.teleport.slice(1), 16);
+    }
+
+    const chunkType = chunk.type.split('_')[0];
+
+    switch (chunkType) {
+      case 'box':
+        return parseInt(colors.bhop.slice(1), 16);
+      case 'ramp':
+        return parseInt(colors.surf.slice(1), 16);
+      case 'cross':
+        return parseInt(colors.primary.slice(1), 16);
+      default:
+        return parseInt(colors.primary.slice(1), 16);
+    }
+  }
+
+  protected applyColorToChunk(chunk: Chunk, colorHex: number): void {
+    chunk.mesh.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((m) => {
+            if ((m as any).color) {
+              (m as any).color.setHex(colorHex);
+            }
+          });
+        } else if (mesh.material && (mesh.material as any).color) {
+          (mesh.material as any).color.setHex(colorHex);
+        }
+      }
+    });
+  }
+
+  public getChunkManager(): ChunkManager {
+    return this.chunkManager;
   }
 }
