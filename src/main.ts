@@ -127,7 +127,7 @@ async function initGame(initialTheme: Theme, gameLoader: GameLoader) {
     authManager.logout();
   };
 
-  ui.onApplySettings = async (settings) => {
+  ui.onApplySettings = async (settings, nicknameChanged) => {
     try {
       player.setSensitivity(settings.sensitivity);
       if (settings.keybindings) {
@@ -141,7 +141,7 @@ async function initGame(initialTheme: Theme, gameLoader: GameLoader) {
         keybindings: settings.keybindings
       };
 
-      await authManager.saveSettings(settingsToSave);
+      await authManager.saveSettings(settingsToSave, nicknameChanged);
       ui.updateUserHeader(authManager.currentUser, settingsToSave.nickname);
       ui.toggleSettings(false);
     } catch (e: any) {
@@ -187,6 +187,8 @@ async function initGame(initialTheme: Theme, gameLoader: GameLoader) {
     ui.updateUserHeader(authManager.currentUser, settings.nickname);
   };
 
+  authManager.onSettingsLoaded(authManager.settings);
+
   ui.onPlayAgain = performRestart;
 
   ui.onShowLeaderboard = async (mode, difficulty, requestId) => {
@@ -217,7 +219,7 @@ async function initGame(initialTheme: Theme, gameLoader: GameLoader) {
   };
 
   ui.onSelectTheme = async (theme) => {
-    authManager.setActiveTheme(theme);
+    await authManager.setActiveTheme(theme);
     applyTheme(theme, gameLoader);
   };
 

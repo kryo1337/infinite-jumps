@@ -217,9 +217,9 @@ export class AuthManager {
     }
   }
 
-  public async saveSettings(settings: UserSettings): Promise<void> {
+  public async saveSettings(settings: UserSettings, nicknameChanged: boolean = false): Promise<void> {
     if (this._currentUser && this.db) {
-      if (settings.nickname !== this._currentSettings.nickname) {
+      if (nicknameChanged) {
         const taken = await this.isNicknameTaken(settings.nickname);
         if (taken) {
           throw new Error("Nickname is already taken");
@@ -236,20 +236,22 @@ export class AuthManager {
         const userRef = doc(this.db, 'users', this._currentUser.uid);
         await setDoc(userRef, settings, { merge: true });
 
-        const updatePromises: Promise<void>[] = [];
-        for (const mode of Object.keys(MODE_SETTINGS)) {
-          for (const diff of Object.keys(DIFFICULTY_SETTINGS)) {
-            const collectionPath = `leaderboards/${mode}_${diff}/scores`;
-            const scoreRef = doc(this.db, collectionPath, this._currentUser.uid);
-            updatePromises.push(
-              updateDoc(scoreRef, { nickname: settings.nickname })
-                .catch(() => {
-                  // document doesn't exist
-                })
-            );
+        if (nicknameChanged) {
+          const updatePromises: Promise<void>[] = [];
+          for (const mode of Object.keys(MODE_SETTINGS)) {
+            for (const diff of Object.keys(DIFFICULTY_SETTINGS)) {
+              const collectionPath = `leaderboards/${mode}_${diff}/scores`;
+              const scoreRef = doc(this.db, collectionPath, this._currentUser.uid);
+              updatePromises.push(
+                updateDoc(scoreRef, { nickname: settings.nickname })
+                  .catch(() => {
+                    // document doesn't exist
+                  })
+              );
+            }
           }
+          await Promise.all(updatePromises);
         }
-        await Promise.all(updatePromises);
 
       } catch (error) {
         console.error('Error saving settings to Firestore:', error);
@@ -630,13 +632,13 @@ export class AuthManager {
     }
   }
 
-  public setActiveTheme(theme: Theme): void {
+  public async setActiveTheme(theme: Theme): Promise<void> {
     try {
       localStorage.setItem(AuthManager.THEME_STORAGE_KEY, JSON.stringify(theme));
 
       if (this._currentUser && this.db && theme.id) {
         const userRef = doc(this.db, 'users', this._currentUser.uid);
-        setDoc(userRef, { activeThemeId: theme.id }, { merge: true }).catch(err => {
+        await setDoc(userRef, { activeThemeId: theme.id }, { merge: true }).catch(err => {
           console.error('Failed to sync active theme to DB:', err);
         });
       }
