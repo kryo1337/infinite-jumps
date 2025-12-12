@@ -4,24 +4,27 @@
 
 ## Features
 
-### Physics & Movement
-*   **Bunnyhop**: Authentic air acceleration and friction calculations allow players to gain speed by strafing in the air.
-*   **Surf**: Custom velocity projection logic enables smooth gliding on angled surfaces.
+### Physics & Gameplay
+*   **Authentic Movement**: 1:1 recreation of Air Acceleration and Surf friction.
+*   **Game Modes**:
+    *   **ONLY BHOP**: Endless flat platforms for bunnyhopping.
+    *   **ONLY SURF**: Continuous angled ramps for surfing.
+    *   **BHOP & SURF**: A balanced mix of platforms and surf ramps.
+    *   **OBSTACLES**: Advanced course with hazards (Damage blocks, Rotating Crosses, Teleporters).
+*   **Difficulties**: Easy, Normal, Hard (adapts platform spacing and sizing).
 
-### Map & Gameplay
-*   **Infinite Level**: A procedurally generated endless course:
-    *   **Dynamic Spacing**: Platform gaps increase dynamically based on player speed.
-    *   **Endless Generation**: New blocks spawn ahead of you while old ones are recycled.
-    *   **High Performance**: Optimized object pooling ensures smooth gameplay.
-*   **UI**:
-    *   Real-time **HUD** displaying FPS and Speed (units/second).
-    *   **Sensitivity Slider** for adjusting mouse control.
+### Online & Social
+*   **Cloud Save**: Google Login to sync Settings, Keybindings, and Themes.
+*   **Leaderboards**: Global rankings for every mode and difficulty.
+*   **Themes**: Create, save, and share custom visual themes (Skyboxes & Color Palettes).
 
 ## 🎮 Controls
 
 | Key | Action |
 | :--- | :--- |
 | **W, A, S, D** | Move |
-| **Space** | Jump (Auto-jump enabled) |
+| **Space / Scroll** | Jump (Auto-bhop supported) |
 | **Mouse** | Look |
 | **R** | Instant Respawn |
+
+*Keybindings are fully customizable in Settings.*
