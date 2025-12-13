@@ -95,7 +95,7 @@ export abstract class BaseLevel {
       case 'ramp':
         return parseInt(colors.surf.slice(1), 16);
       case 'cross':
-        return parseInt(colors.primary.slice(1), 16);
+        return parseInt(colors.bhop.slice(1), 16);
       default:
         return parseInt(colors.primary.slice(1), 16);
     }

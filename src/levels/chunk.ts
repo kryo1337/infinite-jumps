@@ -59,7 +59,6 @@ export class Chunk {
     this.mesh.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
-        mesh.frustumCulled = false;
         if (Array.isArray(mesh.material)) {
           mesh.material.forEach((m) => {
             if ((m as any).color) (m as any).color.setHex(color);

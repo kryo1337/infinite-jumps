@@ -70,9 +70,15 @@ export const GAME_STATE = {
 };
 
 export const DIFFICULTY_SETTINGS = {
-  easy: { sizeMult: 1.5, spacingMult: 0.8 },
-  normal: { sizeMult: 1.0, spacingMult: 1.0 },
-  hard: { sizeMult: 0.5, spacingMult: 1.2 }
+  easy: { sizeMult: 1.5, spacingMult: 0.5, speedSpacingMult: 0.1, distSpacingMult: 0.0 },
+  normal: { sizeMult: 1.0, spacingMult: 1.0, speedSpacingMult: 0.2, distSpacingMult: 0.002 },
+  hard: { sizeMult: 0.6, spacingMult: 1.5, speedSpacingMult: 0.3, distSpacingMult: 0.004 }
+};
+
+export const MODE_DIFFICULTY_OVERRIDES: { [mode: string]: { [difficulty: string]: Partial<typeof DIFFICULTY_SETTINGS.normal> } } = {
+  'only_surf': {
+    'hard': { spacingMult: 1.1 }
+  }
 };
 
 export const MODE_SETTINGS: { [key: string]: string[] } = {
@@ -123,6 +129,9 @@ export const GAME_CONFIG = {
     SPACING_SPEED_FACTOR: 5.0,
     X_SPREAD: 10.0,
     Y_OFFSET: 0,
+    FIXED_FIRST_GAP: {
+      'only_surf': 6.0
+    } as { [key: string]: number },
     COLORS,
     PROBABILITY_SETTINGS: {
       'only_bhop': {

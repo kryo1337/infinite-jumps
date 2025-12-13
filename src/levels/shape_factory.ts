@@ -48,6 +48,7 @@ export class ShapeFactory {
     const box2 = new THREE.BoxGeometry(armWidth, size, thickness);
 
     const merged = BufferGeometryUtils.mergeGeometries([box1, box2]);
+    merged.computeBoundingSphere();
     return merged;
   }
 

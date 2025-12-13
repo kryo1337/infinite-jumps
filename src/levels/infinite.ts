@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BaseLevel } from './base_level';
 import { Chunk } from './chunk';
-import { GAME_CONFIG, type BlockType, GAME_STATE, DIFFICULTY_SETTINGS, MODE_SETTINGS } from '../config';
+import { GAME_CONFIG, type BlockType, GAME_STATE, DIFFICULTY_SETTINGS, MODE_SETTINGS, MODE_DIFFICULTY_OVERRIDES } from '../config';
 
 export class InfiniteLevel extends BaseLevel {
   private lastBlockEndZ: number = 5;
@@ -63,6 +63,7 @@ export class InfiniteLevel extends BaseLevel {
     }
 
     if (futureLogicalIds.size < 4) {
+      const isGeneratingFirstBlock = this.isFirstGen;
       let typeData: BlockType;
 
       if (this.isFirstGen && GAME_STATE.currentMode !== 'only_surf' && GAME_STATE.currentMode !== 'only_bhop') {
@@ -107,14 +108,36 @@ export class InfiniteLevel extends BaseLevel {
       const length = typeData.length ?? size[2];
 
       let spacingMult = 1.0;
+      let speedSpacingMult = 0.2;
+      let distSpacingMult = 0.0;
+
       if (GAME_STATE.currentMode !== 'obstacles') {
         const diffSettings = DIFFICULTY_SETTINGS[GAME_STATE.currentDifficulty as keyof typeof DIFFICULTY_SETTINGS];
         if (diffSettings) {
           spacingMult = diffSettings.spacingMult;
+          speedSpacingMult = diffSettings.speedSpacingMult;
+          distSpacingMult = diffSettings.distSpacingMult;
+        }
+
+        const overrides = MODE_DIFFICULTY_OVERRIDES[GAME_STATE.currentMode]?.[GAME_STATE.currentDifficulty];
+        if (overrides) {
+          if (overrides.spacingMult !== undefined) spacingMult = overrides.spacingMult;
+          if (overrides.speedSpacingMult !== undefined) speedSpacingMult = overrides.speedSpacingMult;
+          if (overrides.distSpacingMult !== undefined) distSpacingMult = overrides.distSpacingMult;
         }
       }
 
-      const gap = (GAME_CONFIG.Level.SPACING_BASE * (typeData.spacingMult || 1.0) * spacingMult) + (playerSpeed / GAME_CONFIG.Level.SPACING_SPEED_FACTOR);
+      const distFromStart = Math.max(0, this.lastBlockEndZ);
+      let gap = (GAME_CONFIG.Level.SPACING_BASE * (typeData.spacingMult || 1.0) * spacingMult) +
+        (playerSpeed * speedSpacingMult) +
+        (distFromStart * distSpacingMult);
+
+      if (isGeneratingFirstBlock) {
+        const fixedGap = GAME_CONFIG.Level.FIXED_FIRST_GAP?.[GAME_STATE.currentMode];
+        if (fixedGap !== undefined) {
+          gap = fixedGap;
+        }
+      }
 
       const spawnZ = this.lastBlockEndZ + gap + (size[2] / 2);
 
@@ -197,7 +220,7 @@ export class InfiniteLevel extends BaseLevel {
         finalColor = parseInt(themeColors.damage.slice(1), 16);
       } else if (isTeleport) {
         finalColor = parseInt(themeColors.teleport.slice(1), 16);
-      } else if (type === 'box') {
+      } else if (type === 'box' || type === 'cross') {
         finalColor = parseInt(themeColors.bhop.slice(1), 16);
       } else if (type === 'ramp') {
         finalColor = parseInt(themeColors.surf.slice(1), 16);
