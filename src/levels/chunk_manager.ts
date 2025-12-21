@@ -51,7 +51,7 @@ export class ChunkManager {
       let geometry: THREE.BufferGeometry | null = null;
       let material: THREE.Material | null = null;
       let model: THREE.Object3D | undefined = undefined;
-      let colliderDesc: RAPIER.ColliderDesc;
+      let colliderDesc: RAPIER.ColliderDesc | RAPIER.ColliderDesc[];
 
       if (type === 'down_ramp') {
         const path = extraParams.modelPath || '/models/rampdown.glb';
@@ -95,7 +95,7 @@ export class ChunkManager {
               const armW = extraParams.armWidth || size[0] / 3;
               const thickness = size[2];
               geometry = ShapeFactory.createCross(size[0], armW, thickness);
-              colliderDesc = ShapeFactory.createCrossCollider(size[0], armW, thickness);
+              colliderDesc = ShapeFactory.createCrossColliders(size[0], armW, thickness);
               break;
             default:
               throw new Error(`Unknown chunk type: ${type}`);
@@ -112,7 +112,7 @@ export class ChunkManager {
             case 'cross':
               const armW = extraParams.armWidth || size[0] / 3;
               const thickness = size[2];
-              colliderDesc = ShapeFactory.createCrossCollider(size[0], armW, thickness);
+              colliderDesc = ShapeFactory.createCrossColliders(size[0], armW, thickness);
               break;
             default:
               colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);

@@ -3,17 +3,26 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Chunk } from './chunk';
 import { ChunkManager } from './chunk_manager';
 import type { ThemeColors } from '../config';
+import { PlayerController } from '../player';
+import { UIManager } from '../ui_manager';
 
 export abstract class BaseLevel {
   protected scene: THREE.Scene;
   protected world: RAPIER.World;
   protected chunkManager: ChunkManager;
   protected activeChunks: Chunk[] = [];
+  protected player!: PlayerController;
+  protected ui!: UIManager;
 
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
     this.world = world;
     this.chunkManager = new ChunkManager(scene, world);
+  }
+
+  public setContext(player: PlayerController, ui: UIManager) {
+    this.player = player;
+    this.ui = ui;
   }
 
   public abstract load(): void;

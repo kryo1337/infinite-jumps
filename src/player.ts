@@ -66,6 +66,10 @@ export class PlayerController {
   private _downAxis = { x: 0, y: -1, z: 0 };
   private _identityRot = { x: 0, y: 0, z: 0, w: 1 };
 
+  public get inputState(): PlayerInput {
+    return this.input;
+  }
+
   constructor(
     camera: THREE.PerspectiveCamera,
     domElement: HTMLElement,
@@ -97,6 +101,8 @@ export class PlayerController {
     const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
     this.pitch = euler.x;
     this.yaw = euler.y;
+
+    this._surfCheckShape = new RAPIER.Capsule(0.9, 0.45);
 
     this.createPhysicsBody();
     this.setupInput();
@@ -249,15 +255,17 @@ export class PlayerController {
     );
   }
 
-  public respawn() {
-    this.body.setTranslation(PlayerController.SPAWN_POSITION, true);
+  public respawn(targetPosition?: { x: number, y: number, z: number }) {
+    const spawnPos = targetPosition || PlayerController.SPAWN_POSITION;
+
+    this.body.setTranslation(spawnPos, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.pitch = 0; this.yaw = Math.PI;
 
     this.previousPosition.set(
-      PlayerController.SPAWN_POSITION.x,
-      PlayerController.SPAWN_POSITION.y,
-      PlayerController.SPAWN_POSITION.z
+      spawnPos.x,
+      spawnPos.y,
+      spawnPos.z
     );
 
     this.camera.quaternion.setFromEuler(new THREE.Euler(0, Math.PI, 0, 'YXZ'));
@@ -325,6 +333,8 @@ export class PlayerController {
         return;
       }
     }
+
+    if (!this._surfCheckShape) return;
 
     const shapeHit = this.world.castShape(
       pos,

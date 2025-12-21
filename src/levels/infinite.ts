@@ -12,7 +12,7 @@ export class InfiniteLevel extends BaseLevel {
   private nextLogicalId: number = 0;
 
   public load() {
-    this.chunkManager.preloadModel('/models/rampdown.glb');
+    // this.chunkManager.preloadModel('/models/rampdown.glb');
     this.currentY = 0;
     this.minChunkYThreshold = -Infinity;
     this.nextLogicalId = 0;

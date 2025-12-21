@@ -40,6 +40,7 @@ export class UIManager {
 
   public onResume: (() => void) | null = null;
   public onLoadLevel: ((type: 'infinite') => void) | null = null;
+  public onStartTutorial: (() => void) | null = null;
 
   public onLoginGoogleRequest: (() => void) | null = null;
   public onLogoutRequest: (() => void) | null = null;
@@ -63,6 +64,8 @@ export class UIManager {
   private loadingBar!: HTMLElement;
   private loadingDetails!: HTMLElement;
 
+  private tutorialOverlay!: HTMLElement;
+
   private hasModeChanged: boolean = false;
 
   public get activeTheme(): Theme {
@@ -80,6 +83,7 @@ export class UIManager {
     this.pendingDifficulty = this.currentDifficulty;
 
     this.createLoadingScreen();
+    this.createTutorialOverlay();
 
     this.createHUD();
 
@@ -102,6 +106,9 @@ export class UIManager {
       },
       onOpenVisuals: () => {
         this.toggleVisuals(true);
+      },
+      onOpenTutorial: () => {
+        if (this.onStartTutorial) this.onStartTutorial();
       }
     });
 
@@ -181,6 +188,21 @@ export class UIManager {
     document.body.appendChild(this.loadingScreen);
     this.loadingBar = this.loadingScreen.querySelector('#loading-bar-fill') as HTMLElement;
     this.loadingDetails = this.loadingScreen.querySelector('#loading-status') as HTMLElement;
+  }
+
+  private createTutorialOverlay() {
+    this.tutorialOverlay = document.createElement('div');
+    this.tutorialOverlay.className = 'tutorial-overlay hidden';
+    document.body.appendChild(this.tutorialOverlay);
+  }
+
+  public showTutorialOverlay(text: string) {
+    this.tutorialOverlay.innerHTML = text;
+    this.tutorialOverlay.classList.remove('hidden');
+  }
+
+  public hideTutorialOverlay() {
+    this.tutorialOverlay.classList.add('hidden');
   }
 
   private createHUD() {
@@ -277,6 +299,12 @@ export class UIManager {
             <button id="btn-obstacles" class="toggle-btn" data-mode="obstacles" data-diff="normal">Obstacles</button>
           </div>
         </div>
+        <div class="mode-section">
+          <div class="mode-header">Learn</div>
+          <div class="mode-toggle-group">
+            <button id="btn-tutorial-mode" class="toggle-btn" data-mode="tutorial" data-diff="normal">Tutorial</button>
+          </div>
+        </div>
       </div>
       <div class="settings-actions">
         <button id="btn-gamemode-back" class="menu-btn">Back</button>
@@ -301,8 +329,7 @@ export class UIManager {
           this.pendingMode = mode;
           this.pendingDifficulty = diff;
 
-          btns.forEach(b => b.classList.remove('active'));
-          target.classList.add('active');
+          this.updateActiveGameModeButton(mode, diff, menu);
         }
       });
     });
@@ -542,6 +569,11 @@ export class UIManager {
   public toggleMenu(isOpen: boolean) {
     if (isOpen) {
       this.mainMenu.show();
+      if (this.currentMode === 'tutorial') {
+        this.mainMenu.hideTutorialButton();
+      } else {
+        this.mainMenu.showTutorialButton();
+      }
       this.settingsMenu.hide();
       this.authModal.classList.add('hidden');
       this.gameOverMenu.classList.add('hidden');
@@ -737,6 +769,34 @@ export class UIManager {
       this.loadingScreen.classList.add('hidden');
       this.loadingScreen.style.pointerEvents = 'none';
     }, 100);
+  }
+
+  public setGameMode(mode: string, difficulty: string) {
+    this.currentMode = mode;
+    this.currentDifficulty = difficulty;
+    this.pendingMode = mode;
+    this.pendingDifficulty = difficulty;
+
+    this.updateActiveGameModeButton(mode, difficulty);
+
+    if (mode === 'tutorial') {
+      this.mainMenu.hideTutorialButton();
+    } else {
+      this.mainMenu.showTutorialButton();
+    }
+  }
+
+  private updateActiveGameModeButton(mode: string, difficulty: string, container?: HTMLElement) {
+    const root = container || this.gameModeMenu;
+    const btns = root.querySelectorAll('.toggle-btn');
+    btns.forEach(b => {
+      b.classList.remove('active');
+      const bMode = b.getAttribute('data-mode');
+      const bDiff = b.getAttribute('data-diff');
+      if (bMode === mode && bDiff === difficulty) {
+        b.classList.add('active');
+      }
+    });
   }
 
   public checkModeChanged(): boolean {

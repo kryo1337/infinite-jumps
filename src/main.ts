@@ -6,7 +6,7 @@ import { LevelLoader } from './level_loader';
 import { UIManager } from './ui_manager';
 import { AuthManager } from './auth_manager';
 import { GameLoader } from './utils/game_loader';
-import { GAME_CONFIG, DEFAULT_THEME } from './config';
+import { GAME_CONFIG, DEFAULT_THEME, GAME_STATE } from './config';
 import type { Theme } from './config';
 
 // --- GLOBAL VARIABLES ---
@@ -96,23 +96,52 @@ let isInitialLoad = true;
 async function initGame(initialTheme: Theme, gameLoader: GameLoader) {
   // --- WORLD GEN ---
   levelLoader = new LevelLoader(scene, world);
-  levelLoader.loadLevel(GAME_CONFIG.World.initialLevel);
 
   // --- PLAYER ---
   player = new PlayerController(camera, document.body, world, {
     mouseSensitivity: GAME_CONFIG.World.defaultSensitivity,
   });
 
+  levelLoader.setContext(player, ui);
+  levelLoader.loadLevel(GAME_CONFIG.World.initialLevel);
+
   // --- UI WIRING ---
   ui.onLoadLevel = (type) => {
-    if (type === 'infinite') {
-      levelLoader.loadLevel(type);
-      player.respawn();
-      if (currentTheme) {
-        levelLoader.updateChunkColors(currentTheme.colors);
+    try {
+      if (type === 'infinite') {
+        levelLoader.loadLevel(type);
+        player.respawn();
+        if (currentTheme) {
+          levelLoader.updateChunkColors(currentTheme.colors);
+        }
+        document.body.requestPointerLock();
       }
+    } catch (e) {
+      console.error("Failed to load level:", e);
+    }
+  };
+
+  ui.onResume = () => {
+    if (ui.checkModeChanged()) {
+      if (GAME_STATE.currentMode === 'tutorial') {
+        ui.onStartTutorial?.();
+      } else {
+        performRestart();
+      }
+    } else {
       document.body.requestPointerLock();
     }
+  };
+
+  ui.onStartTutorial = () => {
+    ui.toggleMenu(false);
+    GAME_STATE.currentMode = 'tutorial';
+    ui.setGameMode('tutorial', 'normal');
+    levelLoader.loadLevel('tutorial');
+    if (currentTheme) {
+      levelLoader.updateChunkColors(currentTheme.colors);
+    }
+    document.body.requestPointerLock();
   };
 
   ui.onLoginGoogleRequest = async () => {
@@ -290,8 +319,14 @@ const performRestart = () => {
     document.activeElement.blur();
   }
 
-  player.respawn();
-  levelLoader.loadLevel('infinite');
+  const requestedType = GAME_STATE.currentMode === 'tutorial' ? 'tutorial' : 'infinite';
+
+  if (levelLoader.currentLevelType === requestedType && requestedType === 'tutorial') {
+    levelLoader.restart();
+  } else {
+    player.respawn();
+    levelLoader.loadLevel(requestedType);
+  }
 
   if (currentTheme) {
     levelLoader.updateChunkColors(currentTheme.colors);

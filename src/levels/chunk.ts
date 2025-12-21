@@ -5,7 +5,8 @@ export class Chunk {
   public type: string;
   public mesh: THREE.Object3D;
   public body: RAPIER.RigidBody;
-  public collider: RAPIER.Collider;
+  public colliders: RAPIER.Collider[] = [];
+  public get collider(): RAPIER.Collider { return this.colliders[0]; }
   public isDeadly: boolean = false;
   public teleportOffset: THREE.Vector3 | null = null;
   public logicalId: number = -1;
@@ -19,7 +20,7 @@ export class Chunk {
     world: RAPIER.World,
     geometry: THREE.BufferGeometry | null,
     material: THREE.Material | null,
-    colliderDesc: RAPIER.ColliderDesc,
+    colliderDesc: RAPIER.ColliderDesc | RAPIER.ColliderDesc[],
     model?: THREE.Object3D
   ) {
     this.type = type;
@@ -42,7 +43,10 @@ export class Chunk {
     this.body = this.world.createRigidBody(bodyDesc);
     this.body.setEnabled(false);
 
-    this.collider = this.world.createCollider(colliderDesc, this.body);
+    const descs = Array.isArray(colliderDesc) ? colliderDesc : [colliderDesc];
+    descs.forEach(d => {
+      this.colliders.push(this.world.createCollider(d, this.body));
+    });
   }
 
   public activate(

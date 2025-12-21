@@ -92,7 +92,8 @@ export const MODE_DISPLAY_NAMES: { [key: string]: string } = {
   'only_bhop': 'Only Bhop',
   'only_surf': 'Only Surf',
   'bhop_surf': 'Bhop & Surf',
-  'obstacles': 'Obstacles'
+  'obstacles': 'Obstacles',
+  'tutorial': 'Tutorial'
 };
 
 export const DIFFICULTY_DISPLAY_NAMES: { [key: string]: string } = {

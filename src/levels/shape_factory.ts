@@ -71,5 +71,11 @@ export class ShapeFactory {
 
     return RAPIER.ColliderDesc.trimesh(vertices, finalIndices);
   }
+
+  static createCrossColliders(size: number, armWidth: number, thickness: number): RAPIER.ColliderDesc[] {
+    const col1 = RAPIER.ColliderDesc.cuboid(size / 2.0, armWidth / 2.0, thickness / 2.0);
+    const col2 = RAPIER.ColliderDesc.cuboid(armWidth / 2.0, size / 2.0, thickness / 2.0);
+    return [col1, col2];
+  }
 }
 

@@ -1,7 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { ModelLoader } from './model_loader';
 
 export class GameLoader {
   private manager: THREE.LoadingManager;
@@ -47,7 +45,7 @@ export class GameLoader {
     };
 
     this.loadSkybox(skyboxPath);
-    this.loadRampModel();
+    // this.loadRampModel();
   }
 
   private loadSkybox(path: string) {
@@ -86,26 +84,26 @@ export class GameLoader {
     return this.currentSkyboxPath;
   }
 
-  private loadRampModel() {
-    const modelPath = '/models/rampdown.glb';
-    new GLTFLoader(this.manager).load(
-      modelPath,
-      (gltf) => {
-        const model = gltf.scene;
-
-        model.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-
-        ModelLoader.add(modelPath, model);
-      },
-      undefined,
-      (error) => {
-        console.error('An error occurred loading the ramp model:', error);
-      }
-    );
-  }
+  // private loadRampModel() {
+  //   const modelPath = '/models/rampdown.glb';
+  //   new GLTFLoader(this.manager).load(
+  //     modelPath,
+  //     (gltf) => {
+  //       const model = gltf.scene;
+  //
+  //       model.traverse((child) => {
+  //         if ((child as THREE.Mesh).isMesh) {
+  //           child.castShadow = true;
+  //           child.receiveShadow = true;
+  //         }
+  //       });
+  //
+  //       ModelLoader.add(modelPath, model);
+  //     },
+  //     undefined,
+  //     (error) => {
+  //       console.error('An error occurred loading the ramp model:', error);
+  //     }
+  //   );
+  // }
 }
