@@ -19,6 +19,7 @@ export class TutorialLevel extends BaseLevel {
 
   private room1Complete: boolean = false;
   private isDisposed: boolean = false;
+  private isFinished: boolean = false;
   private completionTimeout: any = null;
 
   public dispose() {
@@ -41,7 +42,7 @@ export class TutorialLevel extends BaseLevel {
       this.completionTimeout = null;
     }
 
-    if (this.currentRoom > 5) {
+    if (this.isFinished || this.currentRoom > 5) {
       this.ui.hideTutorialOverlay();
       this.ui.setGameMode('bhop_surf', 'normal');
       GAME_STATE.currentMode = 'bhop_surf';
@@ -70,6 +71,8 @@ export class TutorialLevel extends BaseLevel {
   }
 
   public update(_playerZ: number, _playerSpeed: number, playerY: number) {
+    if (this.isFinished) return;
+
     if (playerY < -20) {
       this.player.respawn(this.currentSpawnPoint);
       return;
@@ -131,6 +134,25 @@ export class TutorialLevel extends BaseLevel {
   }
 
   private loadRoom(index: number) {
+    if (this.isFinished) return;
+
+    if (index > 5) {
+      this.isFinished = true;
+      this.ui.showTutorialOverlay("Tutorial Complete!");
+      this.completionTimeout = setTimeout(() => {
+        this.completionTimeout = null;
+        if (this.isDisposed) return;
+        this.ui.hideTutorialOverlay();
+
+        this.ui.setGameMode('bhop_surf', 'normal');
+        GAME_STATE.currentMode = 'bhop_surf';
+        GAME_STATE.currentDifficulty = 'normal';
+
+        this.ui.onLoadLevel?.('infinite');
+      }, 500);
+      return;
+    }
+
     this.clearRoom();
     this.currentRoom = index;
 
@@ -151,20 +173,6 @@ export class TutorialLevel extends BaseLevel {
         break;
       case 5:
         this.setupRoom5();
-        break;
-      default:
-        this.ui.showTutorialOverlay("Tutorial Complete!");
-        this.completionTimeout = setTimeout(() => {
-          this.completionTimeout = null;
-          if (this.isDisposed) return;
-          this.ui.hideTutorialOverlay();
-
-          this.ui.setGameMode('bhop_surf', 'normal');
-          GAME_STATE.currentMode = 'bhop_surf';
-          GAME_STATE.currentDifficulty = 'normal';
-
-          this.ui.onLoadLevel?.('infinite');
-        }, 500);
         break;
     }
 
