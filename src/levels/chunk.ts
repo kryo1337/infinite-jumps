@@ -13,6 +13,7 @@ export class Chunk {
   private scene: THREE.Scene;
   private world: RAPIER.World;
   private isModel: boolean = false;
+  private ownedMaterials: THREE.Material[] = [];
 
   constructor(
     type: string,
@@ -52,7 +53,7 @@ export class Chunk {
   public activate(
     pos: { x: number, y: number, z: number },
     rot: { x: number, y: number, z: number, w: number },
-    color: number
+    material: THREE.MeshStandardMaterial
   ) {
     this.isDeadly = false;
     this.teleportOffset = null;
@@ -60,18 +61,7 @@ export class Chunk {
     this.mesh.position.set(pos.x, pos.y, pos.z);
     this.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
 
-    this.mesh.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((m) => {
-            if ((m as any).color) (m as any).color.setHex(color);
-          });
-        } else if (mesh.material && (mesh.material as any).color) {
-          (mesh.material as any).color.setHex(color);
-        }
-      }
-    });
+    this.applyMaterial(material);
 
     this.mesh.visible = true;
     this.scene.add(this.mesh);
@@ -79,6 +69,39 @@ export class Chunk {
     this.body.setTranslation(pos, true);
     this.body.setRotation(rot, true);
     this.body.setEnabled(true);
+  }
+
+  public applyMaterial(material: THREE.MeshStandardMaterial) {
+    if (this.isModel) {
+      this.applyModelColor(material.color.getHex());
+      return;
+    }
+
+    (this.mesh as THREE.Mesh).material = material;
+  }
+
+  private applyModelColor(color: number) {
+    this.mesh.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+
+      const wasArray = Array.isArray(mesh.material);
+      const materials = (wasArray ? mesh.material as THREE.Material[] : [mesh.material as THREE.Material]).map((m) => {
+        const owned = this.ownMaterial(m);
+        if ((owned as any).color) (owned as any).color.setHex(color);
+        return owned;
+      });
+
+      mesh.material = wasArray ? materials : materials[0];
+    });
+  }
+
+  private ownMaterial(material: THREE.Material): THREE.Material {
+    if (this.ownedMaterials.includes(material)) return material;
+
+    const owned = material.clone();
+    this.ownedMaterials.push(owned);
+    return owned;
   }
 
   public deactivate() {
@@ -91,19 +114,8 @@ export class Chunk {
     this.deactivate();
     this.world.removeRigidBody(this.body);
 
-    this.mesh.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-
-        if (!this.isModel) {
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach((m) => m.dispose());
-          } else if (mesh.material) {
-            mesh.material.dispose();
-          }
-        }
-      }
-    });
+    this.ownedMaterials.forEach(m => m.dispose());
+    this.ownedMaterials = [];
   }
 }
 

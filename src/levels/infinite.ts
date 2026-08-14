@@ -3,6 +3,10 @@ import { BaseLevel } from './base_level';
 import { Chunk } from './chunk';
 import { GAME_CONFIG, type BlockType, GAME_STATE, DIFFICULTY_SETTINGS, MODE_SETTINGS, MODE_DIFFICULTY_OVERRIDES } from '../config';
 
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const TMP_QUAT = new THREE.Quaternion();
+
 export class InfiniteLevel extends BaseLevel {
   private lastBlockEndZ: number = 5;
   private isFirstGen: boolean = true;
@@ -10,6 +14,7 @@ export class InfiniteLevel extends BaseLevel {
   private currentY: number = 0;
   private minChunkYThreshold: number = -Infinity;
   private nextLogicalId: number = 0;
+  private futureLogicalIds: Set<number> = new Set<number>();
 
   public load() {
     // this.chunkManager.preloadModel('/models/rampdown.glb');
@@ -53,16 +58,16 @@ export class InfiniteLevel extends BaseLevel {
       }
     }
 
-    const futureLogicalIds = new Set<number>();
+    this.futureLogicalIds.clear();
     for (const c of this.activeChunks) {
       if (c.mesh.position.z > playerZ) {
         if (c.logicalId !== -1) {
-          futureLogicalIds.add(c.logicalId);
+          this.futureLogicalIds.add(c.logicalId);
         }
       }
     }
 
-    if (futureLogicalIds.size < 4) {
+    if (this.futureLogicalIds.size < 4) {
       const isGeneratingFirstBlock = this.isFirstGen;
       let typeData: BlockType;
 
@@ -151,21 +156,21 @@ export class InfiniteLevel extends BaseLevel {
         const rampY = y + 1;
 
         // Left Ramp
-        const qLeft = new THREE.Quaternion();
+        const qLeft = TMP_QUAT.identity();
         this.spawnChunk('ramp', size, { x: x - offset, y: rampY, z: spawnZ }, { x: qLeft.x, y: qLeft.y, z: qLeft.z, w: qLeft.w }, typeData.color, currentLogicalId);
 
         // Right Ramp
-        const qRight = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+        const qRight = TMP_QUAT.setFromAxisAngle(AXIS_Y, Math.PI);
         this.spawnChunk('ramp', size, { x: x + offset, y: rampY, z: spawnZ }, { x: qRight.x, y: qRight.y, z: qRight.z, w: qRight.w }, typeData.color, currentLogicalId);
 
       } else if (typeData.type === 'cross') {
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+        const q = TMP_QUAT.setFromAxisAngle(AXIS_X, Math.PI / 2);
         this.spawnChunk('cross', size, { x: x, y: y, z: spawnZ }, { x: q.x, y: q.y, z: q.z, w: q.w }, typeData.color, currentLogicalId, typeData.extraParams);
 
       } else if (typeData.type === 'down_ramp') {
         const dropHeight = size[1];
         const spawnY = (y + 0.5) - (dropHeight / 2) + 12;
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+        const q = TMP_QUAT.setFromAxisAngle(AXIS_Y, Math.PI);
         this.spawnChunk('down_ramp', size, { x: x, y: spawnY, z: spawnZ }, { x: q.x, y: q.y, z: q.z, w: q.w }, typeData.color, currentLogicalId, typeData.extraParams);
         this.currentY -= (dropHeight - 8);
 

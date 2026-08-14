@@ -13,6 +13,8 @@ export class ChunkManager {
 
   private geometryCache: Map<string, THREE.BufferGeometry> = new Map();
 
+  private materialCache: Map<number, THREE.MeshStandardMaterial> = new Map();
+
   private themeColors: ThemeColors | null = null;
 
   constructor(scene: THREE.Scene, world: RAPIER.World) {
@@ -74,8 +76,12 @@ export class ChunkManager {
             colliderDesc = ModelLoader.createColliderFromModel(model);
           }
         } else {
-          geometry = ShapeFactory.createBox(size[0], size[1], size[2]);
-          material = new THREE.MeshStandardMaterial();
+          geometry = this.geometryCache.get(key) || null;
+          if (!geometry) {
+            geometry = ShapeFactory.createBox(size[0], size[1], size[2]);
+            this.geometryCache.set(key, geometry);
+          }
+          material = this.getMaterial(color);
           colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
         }
       } else {
@@ -118,14 +124,23 @@ export class ChunkManager {
               colliderDesc = ShapeFactory.createBoxCollider(size[0], size[1], size[2]);
           }
         }
-        material = new THREE.MeshStandardMaterial();
+        material = this.getMaterial(color);
       }
 
       chunk = new Chunk(key, this.scene, this.world, geometry, material, colliderDesc, model);
     }
 
-    chunk.activate(pos, rot, color);
+    chunk.activate(pos, rot, this.getMaterial(color));
     return chunk;
+  }
+
+  public getMaterial(color: number): THREE.MeshStandardMaterial {
+    let material = this.materialCache.get(color);
+    if (!material) {
+      material = new THREE.MeshStandardMaterial({ color });
+      this.materialCache.set(color, material);
+    }
+    return material;
   }
 
   public releaseChunk(chunk: Chunk) {
@@ -148,10 +163,25 @@ export class ChunkManager {
 
     this.geometryCache.forEach(g => g.dispose());
     this.geometryCache.clear();
+
+    this.materialCache.forEach(m => m.dispose());
+    this.materialCache.clear();
   }
 
   public setThemeColors(colors: ThemeColors): void {
     this.themeColors = colors;
+  }
+
+  public pruneMaterials(colors: ThemeColors, inUse: Set<number>): void {
+    const palette = new Set(
+      [colors.primary, colors.bhop, colors.surf, colors.teleport, colors.damage].map(c => parseInt(c.slice(1), 16))
+    );
+
+    this.materialCache.forEach((material, color) => {
+      if (palette.has(color) || inUse.has(color)) return;
+      material.dispose();
+      this.materialCache.delete(color);
+    });
   }
 
   public getThemeColors(): ThemeColors | null {

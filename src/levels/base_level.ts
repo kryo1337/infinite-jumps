@@ -81,10 +81,14 @@ export abstract class BaseLevel {
   public updateChunkColors(colors: ThemeColors): void {
     this.chunkManager.setThemeColors(colors);
 
+    const appliedColors = new Set<number>();
     for (const chunk of this.activeChunks) {
       const colorHex = this.getColorForChunk(chunk, colors);
       this.applyColorToChunk(chunk, colorHex);
+      appliedColors.add(colorHex);
     }
+
+    this.chunkManager.pruneMaterials(colors, appliedColors);
   }
 
   protected getColorForChunk(chunk: Chunk, colors: ThemeColors): number {
@@ -111,20 +115,7 @@ export abstract class BaseLevel {
   }
 
   protected applyColorToChunk(chunk: Chunk, colorHex: number): void {
-    chunk.mesh.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((m) => {
-            if ((m as any).color) {
-              (m as any).color.setHex(colorHex);
-            }
-          });
-        } else if (mesh.material && (mesh.material as any).color) {
-          (mesh.material as any).color.setHex(colorHex);
-        }
-      }
-    });
+    chunk.applyMaterial(this.chunkManager.getMaterial(colorHex));
   }
 
   public getChunkManager(): ChunkManager {

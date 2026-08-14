@@ -247,7 +247,7 @@ export class UIManager {
       <div class="footer-left">
           <span>Developed by <a href="https://kryo.dev" target="_blank">kryo</a></span>
           <span class="separator">|</span>
-          <span>&copy; 2025 Infinite Jumps</span>
+          <span>&copy; 2026 Infinite Jumps</span>
       </div>
       <div class="footer-right">
            <a href="https://buymeacoffee.com/kryo" target="_blank" aria-label="Buy Me a Coffee">
