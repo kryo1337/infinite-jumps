@@ -1,6 +1,6 @@
-# infinite jumps
+# infiniteJumps
 
-**infinite jumps** is a high-performance web-based FPS movement game that recreates the mechanics of source engine.
+**infiniteJumps** is a high-performance web-based FPS movement game that recreates the mechanics of source engine.
 
 ## Features
 

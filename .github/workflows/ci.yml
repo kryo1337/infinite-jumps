@@ -1,0 +1,188 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_only:
+        description: "Skip CI and run production deploy only"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.deploy_only != true
+    env:
+      VITE_FIREBASE_API_KEY: dummy
+      VITE_FIREBASE_AUTH_DOMAIN: dummy
+      VITE_FIREBASE_PROJECT_ID: dummy
+      VITE_FIREBASE_STORAGE_BUCKET: dummy
+      VITE_FIREBASE_MESSAGING_SENDER_ID: dummy
+      VITE_FIREBASE_APP_ID: dummy
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || inputs.deploy_only != true
+    env:
+      VITE_FIREBASE_API_KEY: dummy
+      VITE_FIREBASE_AUTH_DOMAIN: dummy
+      VITE_FIREBASE_PROJECT_ID: dummy
+      VITE_FIREBASE_STORAGE_BUCKET: dummy
+      VITE_FIREBASE_MESSAGING_SENDER_ID: dummy
+      VITE_FIREBASE_APP_ID: dummy
+      CLOUDFLARE_TUNNEL_TOKEN: dummy
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Prepare env file
+        run: printenv | grep -E '^(VITE_FIREBASE_|CLOUDFLARE_TUNNEL_TOKEN)' > .env
+
+      - name: Validate compose
+        run: docker compose --env-file .env -f deploy/docker-compose.yml config
+
+      - name: Build infinite-jumps image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          build-args: |
+            VITE_FIREBASE_API_KEY=dummy
+            VITE_FIREBASE_AUTH_DOMAIN=dummy
+            VITE_FIREBASE_PROJECT_ID=dummy
+            VITE_FIREBASE_STORAGE_BUCKET=dummy
+            VITE_FIREBASE_MESSAGING_SENDER_ID=dummy
+            VITE_FIREBASE_APP_ID=dummy
+          cache-from: type=gha,scope=infinite-jumps
+          cache-to: type=gha,mode=max,scope=infinite-jumps
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [web, docker]
+    if: |
+      always() &&
+      (
+        (
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
+          needs.web.result == 'success' &&
+          needs.docker.result == 'success'
+        ) ||
+        (
+          github.event_name == 'workflow_dispatch' && inputs.deploy_only == true &&
+          needs.web.result == 'skipped' &&
+          needs.docker.result == 'skipped'
+        )
+      )
+    environment: prod
+    env:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+      TS_TAGS: ${{ vars.TS_TAGS || 'tag:ci' }}
+    concurrency:
+      group: infinite-jumps-production
+      cancel-in-progress: false
+    steps:
+      - name: Connect to Tailscale
+        if: env.TS_OAUTH_CLIENT_ID != '' && env.TS_OAUTH_SECRET != ''
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ env.TS_TAGS }}
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Set VPS_HOST in the prod environment secrets}"
+          : "${VPS_PORT:?Set VPS_PORT in the prod environment secrets}"
+          : "${VPS_SSH_KEY:?Set VPS_SSH_KEY in the prod environment secrets}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/infinite_jumps_deploy
+          chmod 600 ~/.ssh/infinite_jumps_deploy
+          if command -v tailscale >/dev/null 2>&1; then
+            for i in $(seq 1 30); do
+              if tailscale ping --timeout=5s "$VPS_HOST"; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Tailscale cannot reach VPS_HOST. Set VPS_HOST to the VPS Tailscale IP."
+            tailscale status || true
+            exit 1
+          else
+            for i in $(seq 1 30); do
+              if nc -z "$VPS_HOST" "$VPS_PORT"; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Cannot reach VPS_HOST:VPS_PORT."
+            exit 1
+          fi
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Set VPS_HOST in the prod environment secrets}"
+          : "${VPS_PORT:?Set VPS_PORT in the prod environment secrets}"
+          : "${VPS_USER:?Set VPS_USER in the prod environment secrets}"
+          ssh -i ~/.ssh/infinite_jumps_deploy -o StrictHostKeyChecking=accept-new -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" 'bash -se' <<'EOF'
+          set -euo pipefail
+          cd ~/dev/infinite-jumps
+
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Refusing to deploy over dirty tracked files:"
+            git status --short
+            exit 1
+          fi
+
+          git fetch origin master
+          git pull --ff-only origin master
+
+          compose() { docker compose --env-file .env -f deploy/docker-compose.yml "$@"; }
+
+          compose config >/tmp/infinite-jumps-compose.config
+          compose up -d --build
+          docker builder prune -af --keep-storage 3GB
+          docker image prune -f
+
+          cid="$(compose ps -q infinite-jumps)"
+          for i in $(seq 1 30); do
+            if docker run --rm --network "container:$cid" curlimages/curl:latest -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          compose logs --tail=80 infinite-jumps cloudflared
+          exit 1
+          EOF

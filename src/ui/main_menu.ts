@@ -46,7 +46,7 @@ export class MainMenu {
 
     const content = document.createElement('div');
     content.innerHTML =
-      '<h1 class="menu-title">Infinite Jumps</h1>' +
+      '<h1 class="menu-title brand">infinite<b>Jumps</b></h1>' +
       '<div id="offline-indicator" class="offline-indicator hidden">ONLINE SERVICES UNAVAILABLE</div>' +
       '<button id="btn-return" class="menu-btn">Resume</button>' +
       '<button id="btn-gamemode" class="menu-btn">Change Game Mode</button>' +

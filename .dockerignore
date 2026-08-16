@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+.git
+.github
+.vercel
+.vite
+.zig-cache
+.env
+.env.*
+*.log
+*.local
+*.tsbuildinfo
+.DS_Store
+.vscode
+.idea
