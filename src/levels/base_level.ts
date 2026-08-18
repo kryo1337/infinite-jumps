@@ -11,13 +11,14 @@ export abstract class BaseLevel {
   protected world: RAPIER.World;
   protected chunkManager: ChunkManager;
   protected activeChunks: Chunk[] = [];
+  protected chunksByCollider: Map<number, Chunk> = new Map();
   protected player!: PlayerController;
   protected ui!: UIManager;
 
-  constructor(scene: THREE.Scene, world: RAPIER.World) {
+  constructor(scene: THREE.Scene, world: RAPIER.World, chunkManager: ChunkManager) {
     this.scene = scene;
     this.world = world;
-    this.chunkManager = new ChunkManager(scene, world);
+    this.chunkManager = chunkManager;
   }
 
   public setContext(player: PlayerController, ui: UIManager) {
@@ -35,7 +36,7 @@ export abstract class BaseLevel {
   public dispose() {
     this.activeChunks.forEach(chunk => this.chunkManager.releaseChunk(chunk));
     this.activeChunks = [];
-    this.chunkManager.dispose();
+    this.chunksByCollider.clear();
   }
 
   protected spawnBlock(pos: { x: number, y: number, z: number }, size: [number, number, number], color: number): Chunk {
@@ -47,31 +48,33 @@ export abstract class BaseLevel {
       color
     );
     if (chunk) {
-      this.activeChunks.push(chunk);
+      this.addActiveChunk(chunk);
     }
     return chunk;
   }
 
+  protected addActiveChunk(chunk: Chunk) {
+    this.activeChunks.push(chunk);
+    for (const collider of chunk.colliders) {
+      this.chunksByCollider.set(collider.handle, chunk);
+    }
+  }
+
   protected releaseChunk(chunk: Chunk) {
+    for (const collider of chunk.colliders) {
+      this.chunksByCollider.delete(collider.handle);
+    }
     this.chunkManager.releaseChunk(chunk);
   }
 
   public isChunkDeadly(colliderHandle: number): boolean {
-    for (const chunk of this.activeChunks) {
-      if (chunk.collider.handle === colliderHandle) {
-        return chunk.isDeadly;
-      }
-    }
-    return false;
+    const chunk = this.chunksByCollider.get(colliderHandle);
+    return chunk ? chunk.isDeadly : false;
   }
 
   public getChunkTeleportOffset(colliderHandle: number): THREE.Vector3 | null {
-    for (const chunk of this.activeChunks) {
-      if (chunk.collider.handle === colliderHandle && chunk.teleportOffset) {
-        return chunk.teleportOffset;
-      }
-    }
-    return null;
+    const chunk = this.chunksByCollider.get(colliderHandle);
+    return chunk ? chunk.teleportOffset : null;
   }
 
   public setMinYThreshold(_y: number): void {

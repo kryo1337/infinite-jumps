@@ -17,6 +17,7 @@ export class TutorialLevel extends BaseLevel {
     space: false
   };
 
+  private overlayKeyMask: number = -1;
   private room1Complete: boolean = false;
   private isDisposed: boolean = false;
   private isFinished: boolean = false;
@@ -96,7 +97,9 @@ export class TutorialLevel extends BaseLevel {
     if (input.right > 0) this.pressedKeys.d = true;
     if (input.jump) this.pressedKeys.space = true;
 
-    this.updateRoom1Overlay();
+    if (this.getPressedKeyMask() !== this.overlayKeyMask) {
+      this.updateRoom1Overlay();
+    }
 
     if (this.pressedKeys.w && this.pressedKeys.a && this.pressedKeys.s &&
       this.pressedKeys.d && this.pressedKeys.space) {
@@ -105,7 +108,16 @@ export class TutorialLevel extends BaseLevel {
     }
   }
 
+  private getPressedKeyMask(): number {
+    return (this.pressedKeys.w ? 1 : 0) |
+      (this.pressedKeys.a ? 2 : 0) |
+      (this.pressedKeys.s ? 4 : 0) |
+      (this.pressedKeys.d ? 8 : 0) |
+      (this.pressedKeys.space ? 16 : 0);
+  }
+
   private updateRoom1Overlay() {
+    this.overlayKeyMask = this.getPressedKeyMask();
     const color = (active: boolean) => active ? '#69db7c' : '#ffffff';
 
     const w = `<span style="color: ${color(this.pressedKeys.w)}">W</span>`;
@@ -127,7 +139,7 @@ export class TutorialLevel extends BaseLevel {
 
   private clearRoom() {
     for (const chunk of this.activeChunks) {
-      this.chunkManager.releaseChunk(chunk);
+      this.releaseChunk(chunk);
     }
     this.activeChunks = [];
     this.finishChunkHandle = undefined;
@@ -230,7 +242,7 @@ export class TutorialLevel extends BaseLevel {
     color: number
   ): Chunk {
     const chunk = this.chunkManager.spawnChunk(type, size, pos, rot, color);
-    this.activeChunks.push(chunk);
+    this.addActiveChunk(chunk);
     return chunk;
   }
 

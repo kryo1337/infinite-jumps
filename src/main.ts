@@ -399,6 +399,7 @@ function setupEventListeners() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   });
 }
 
@@ -435,19 +436,20 @@ function gameLoop() {
       world.timestep = PHYSICS_STEP;
       world.step();
       player.updatePhysics(PHYSICS_STEP);
-      levelLoader.update(player.body.translation().z, player.getSpeed(), player.body.translation().y);
+      const playerPos = player.body.translation();
+      const playerSpeed = player.getSpeed();
+      levelLoader.update(playerPos.z, playerSpeed, playerPos.y);
 
       const isDeadlyCollision = player.groundColliderHandle !== undefined && levelLoader.checkDeathCollision(player.groundColliderHandle);
-      const isFallen = player.body.translation().y < (levelLoader.getMinY() + GAME_CONFIG.World.deathThreshold);
+      const isFallen = playerPos.y < (levelLoader.getMinY() + GAME_CONFIG.World.deathThreshold);
 
       if (player.groundColliderHandle !== undefined) {
         const teleportOffset = levelLoader.getTeleportOffset(player.groundColliderHandle);
         if (teleportOffset) {
-          const currentPos = player.body.translation();
           const newPos = {
-            x: currentPos.x + teleportOffset.x,
-            y: currentPos.y + teleportOffset.y,
-            z: currentPos.z + teleportOffset.z
+            x: playerPos.x + teleportOffset.x,
+            y: playerPos.y + teleportOffset.y,
+            z: playerPos.z + teleportOffset.z
           };
           player.teleport(newPos);
           levelLoader.setMinYThreshold(newPos.y - 50);
@@ -459,7 +461,7 @@ function gameLoop() {
           isGameOver = true;
           document.exitPointerLock();
 
-          const score = Math.max(0, player.body.translation().z);
+          const score = Math.max(0, playerPos.z);
 
           ui.showGameOver(score);
 

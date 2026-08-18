@@ -5,6 +5,7 @@ import { InfiniteLevel } from './levels/infinite';
 import { TutorialLevel } from './levels/tutorial';
 import { PlayerController } from './player';
 import { UIManager } from './ui_manager';
+import { ChunkManager } from './levels/chunk_manager';
 import type { ThemeColors } from './config';
 
 export type LevelType = 'infinite' | 'tutorial';
@@ -12,6 +13,7 @@ export type LevelType = 'infinite' | 'tutorial';
 export class LevelLoader {
   private scene: THREE.Scene;
   private world: RAPIER.World;
+  private chunkManager: ChunkManager;
   private currentLevel: BaseLevel | null = null;
   public currentLevelType: LevelType | null = null;
   private player!: PlayerController;
@@ -20,6 +22,7 @@ export class LevelLoader {
   constructor(scene: THREE.Scene, world: RAPIER.World) {
     this.scene = scene;
     this.world = world;
+    this.chunkManager = new ChunkManager(scene, world);
   }
 
   public setContext(player: PlayerController, ui: UIManager) {
@@ -42,9 +45,9 @@ export class LevelLoader {
     }
 
     if (levelType === 'infinite') {
-      this.currentLevel = new InfiniteLevel(this.scene, this.world);
+      this.currentLevel = new InfiniteLevel(this.scene, this.world, this.chunkManager);
     } else if (levelType === 'tutorial') {
-      this.currentLevel = new TutorialLevel(this.scene, this.world);
+      this.currentLevel = new TutorialLevel(this.scene, this.world, this.chunkManager);
     }
 
     if (this.currentLevel) {

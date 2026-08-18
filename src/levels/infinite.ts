@@ -45,6 +45,8 @@ export class InfiniteLevel extends BaseLevel {
   }
 
   public update(playerZ: number, playerSpeed: number, playerY: number) {
+    this.futureLogicalIds.clear();
+
     for (let i = this.activeChunks.length - 1; i >= 0; i--) {
       const chunk = this.activeChunks[i];
       const isStart = Math.abs(chunk.mesh.position.z) < 0.1 && Math.abs(chunk.mesh.position.x) < 0.1;
@@ -55,15 +57,8 @@ export class InfiniteLevel extends BaseLevel {
       if ((!isStart && isTooFarBehind) || isTooFarBelow) {
         this.releaseChunk(chunk);
         this.activeChunks.splice(i, 1);
-      }
-    }
-
-    this.futureLogicalIds.clear();
-    for (const c of this.activeChunks) {
-      if (c.mesh.position.z > playerZ) {
-        if (c.logicalId !== -1) {
-          this.futureLogicalIds.add(c.logicalId);
-        }
+      } else if (chunk.mesh.position.z > playerZ && chunk.logicalId !== -1) {
+        this.futureLogicalIds.add(chunk.logicalId);
       }
     }
 
@@ -236,7 +231,7 @@ export class InfiniteLevel extends BaseLevel {
 
     const chunk = this.chunkManager.spawnChunk(type, size, pos, rot, finalColor, extraParams);
     chunk.logicalId = logicalId;
-    this.activeChunks.push(chunk);
+    this.addActiveChunk(chunk);
     return chunk;
   }
 
