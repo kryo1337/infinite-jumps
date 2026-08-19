@@ -3,12 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>infiniteJumps</title>
+    <title>infiniteJumps - movement game</title>
+    <meta
+      name="description"
+      content="Browser FPS movement game with real Source-engine bhop and surf physics. Chain jumps across bhop, surf and obstacle modes, then climb the global leaderboards."
+    />
+    <link rel="canonical" href="https://infinitejumps.kryo.dev/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://infinitejumps.kryo.dev/" />
+    <meta property="og:site_name" content="infiniteJumps" />
+    <meta property="og:title" content="infiniteJumps - movement game" />
+    <meta
+      property="og:description"
+      content="Browser FPS movement game with real Source-engine bhop and surf physics. Chain jumps across bhop, surf and obstacle modes, then climb the global leaderboards."
+    />
+    <meta property="og:image" content="https://infinitejumps.kryo.dev/og.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@kryoxd" />
+    <meta name="theme-color" content="#242424" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <script>
       try {
-        const t = JSON.parse(localStorage.getItem('kz_active_theme'));
+        const t = JSON.parse(localStorage.getItem("kz_active_theme"));
         if (t?.colors?.primary)
-          document.documentElement.style.setProperty('--theme-color-mauve', t.colors.primary);
+          document.documentElement.style.setProperty(
+            "--theme-color-mauve",
+            t.colors.primary,
+          );
       } catch {}
     </script>
   </head>
